@@ -14,6 +14,12 @@ const setup = ({ emailTaken = false, pendingExists = true } = {}) => {
     existsByEmail: vi.fn(async () => emailTaken),
     create: vi.fn(async (data: Record<string, unknown>) => ({ id: 'new-id', ...data })),
     activatePending: vi.fn(async () => pendingExists),
+    findActiveById: vi.fn(async (id: string) => ({
+      id,
+      fullName: 'Ada Lovelace',
+      email: 'analyst@example.com',
+      role: Role.ANALYST,
+    })),
   };
   const passwordService = { hash: vi.fn(async (p: string) => `hashed:${p}`) };
   const service = new AccountService(
@@ -68,10 +74,21 @@ describe('AccountService', () => {
   });
 
   describe('approve', () => {
-    it('activates a pending account', async () => {
+    it('activates a pending account and returns its details', async () => {
       const { service, authModelAction } = setup();
-      await service.approve('account-1', 'admin-1');
+
+      const result = await service.approve('account-1', 'admin-1');
+
       expect(authModelAction.activatePending).toHaveBeenCalledWith('account-1');
+      expect(result).toEqual({
+        message: 'Account approved',
+        account: {
+          id: 'account-1',
+          fullName: 'Ada Lovelace',
+          email: 'analyst@example.com',
+          role: Role.ANALYST,
+        },
+      });
     });
 
     it('returns 404 when there is no pending account with that id', async () => {

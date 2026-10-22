@@ -31,7 +31,7 @@ export class UsersController {
   }
 
   @Post(':id/approve')
-  @HttpCode(HttpStatus.NO_CONTENT)
+  @HttpCode(HttpStatus.OK)
   @UsersDocs.Approve()
   approve(
     @Param('id', ParseUUIDPipe) id: string,

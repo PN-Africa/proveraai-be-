@@ -5,6 +5,7 @@ import { LoginDto, SignupDto } from './dtos/auth.dto.js';
 import {
   AccountProfile,
   AccountService,
+  ApprovedAccount,
   PendingAccount,
 } from './services/account.service.js';
 import { AuthCookieService } from './services/auth-cookie.service.js';
@@ -85,7 +86,7 @@ export class AuthService {
     return this.accountService.listPending();
   }
 
-  approveAccount(id: string, adminId: string): Promise<void> {
+  approveAccount(id: string, adminId: string): Promise<ApprovedAccount> {
     return this.accountService.approve(id, adminId);
   }
 

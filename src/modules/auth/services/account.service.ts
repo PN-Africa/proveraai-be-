@@ -30,6 +30,11 @@ export interface PendingAccount {
   createdAt: Date;
 }
 
+export interface ApprovedAccount {
+  message: string;
+  account: AccountProfile;
+}
+
 export interface SignupInput {
   fullName: string;
   email: string;
@@ -93,11 +98,15 @@ export class AccountService {
     }));
   }
 
-  async approve(id: string, adminId: string): Promise<void> {
+  async approve(id: string, adminId: string): Promise<ApprovedAccount> {
     if (!(await this.authModelAction.activatePending(id))) {
       throw new NotFoundException('No pending account with this id');
     }
     this.logger.log(`Account approved: id=${id} by=${adminId}`);
+    // Just activated, so it is found unless it was deleted in between
+    const account = await this.authModelAction.findActiveById(id);
+    if (!account) throw new NotFoundException('No pending account with this id');
+    return { message: 'Account approved', account: this.toProfile(account) };
   }
 
   toProfile(account: AccountModel): AccountProfile {

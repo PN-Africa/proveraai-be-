@@ -22,7 +22,11 @@ export class UsersDocs {
         description: 'The analyst can log in from now on',
       }),
       ApiCookieAuth(),
-      ApiResponse({ status: 204, description: 'Approved' }),
+      ApiResponse({
+        status: 200,
+        description:
+          '{ message: "Account approved", account: { id, fullName, email, role } }',
+      }),
       ApiResponse({ status: 403, description: 'Not an administrator' }),
       ApiResponse({ status: 404, description: 'No pending account with this id' }),
     );
