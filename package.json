@@ -7,10 +7,9 @@
   "license": "UNLICENSED",
   "type": "module",
   "scripts": {
-    "build": "nest build",
-    "deploy": "nest deploy",
+    "build": "node api.js && nest build",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
-    "start": "nest start",
+    "start": "node api.js && nest start",
     "start:dev": "nest start --watch",
     "start:debug": "nest start --debug --watch",
     "start:prod": "node dist/main",
@@ -49,7 +48,6 @@
   },
   "devDependencies": {
     "@nestjs/cli": "^12.0.0",
-    "@nestjs/mau": "^0.0.6",
     "@nestjs/schematics": "^12.0.0",
     "@nestjs/testing": "^12.0.1",
     "@types/cookie-parser": "^1.4.10",
