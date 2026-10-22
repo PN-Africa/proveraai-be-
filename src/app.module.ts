@@ -11,6 +11,7 @@ import { REDIS_CLIENT } from './common/redis/redis.constants.js';
 import { RedisThrottlerStorage } from './common/redis/redis-throttler-storage.js';
 import { dataSource } from './database/data-source.js';
 import { AuthModule } from './modules/auth/auth.module.js';
+import { UsersModule } from './modules/users/users.module.js';
 // nest-kit:imports
 
 export const { ObserveModule, ObserveInstrument } = createObserveModule();
@@ -61,6 +62,7 @@ export const observeEnabled = Boolean(observeAppKey && observeAppSecret);
 
     // Feature modules
     AuthModule,
+    UsersModule,
     // nest-kit:modules
   ],
   controllers: [AppController],

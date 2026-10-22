@@ -1,27 +1,99 @@
-import { Injectable, NotImplementedException } from '@nestjs/common';
-import { LoginDto } from './dtos/auth.dto.js';
-import { AuthModelAction } from './model-actions/auth-model-action.js';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
+import type { Request, Response } from 'express';
+import type { AuthUser } from '../../common/decorators/current-user.decorator.js';
+import { LoginDto, SignupDto } from './dtos/auth.dto.js';
+import {
+  AccountProfile,
+  AccountService,
+  PendingAccount,
+} from './services/account.service.js';
+import { AuthCookieService } from './services/auth-cookie.service.js';
+import { CredentialsService } from './services/credentials.service.js';
+import { RefreshTokenService } from './services/refresh-token.service.js';
+import { TokenRevocationService } from './services/token-revocation.service.js';
 import { TokenService } from './services/token.service.js';
 
-// The service holds business logic. It depends on model actions for data
-// access and on sub-services (services/) for focused jobs. This is a skeleton.
-// TODO(template): implement
 @Injectable()
 export class AuthService {
   constructor(
-    private readonly authModelAction: AuthModelAction,
+    private readonly credentialsService: CredentialsService,
+    private readonly accountService: AccountService,
     private readonly tokenService: TokenService,
+    private readonly refreshTokenService: RefreshTokenService,
+    private readonly tokenRevocationService: TokenRevocationService,
+    private readonly authCookieService: AuthCookieService,
   ) {}
 
-  async login(_dto: LoginDto) {
-    throw new NotImplementedException();
+  async login(dto: LoginDto, req: Request, res: Response): Promise<AccountProfile> {
+    const account = await this.credentialsService.authenticate(
+      dto.email,
+      dto.password,
+      req.ip ?? null,
+    );
+    const access = this.tokenService.signAccessToken(account);
+    const refresh = await this.refreshTokenService.issue(account.id);
+    this.authCookieService.setSessionCookies(res, access, refresh);
+    await this.accountService.recordLogin(account.id);
+    return this.accountService.toProfile(account);
   }
 
-  async logout() {
-    throw new NotImplementedException();
+  async refresh(req: Request, res: Response): Promise<AccountProfile> {
+    try {
+      const token = this.authCookieService.readRefreshToken(req);
+      if (!token) throw new UnauthorizedException();
+
+      const { accountId, refresh } = await this.refreshTokenService.rotate(token);
+      const account = await this.accountService.findActive(accountId);
+      if (!account) {
+        await this.refreshTokenService.revokeAllForAccount(accountId);
+        throw new UnauthorizedException();
+      }
+
+      const access = this.tokenService.signAccessToken(account);
+      this.authCookieService.setSessionCookies(res, access, refresh);
+      return this.accountService.toProfile(account);
+    } catch (err) {
+      this.authCookieService.clearSessionCookies(res);
+      throw err;
+    }
   }
 
-  async me(_user: unknown) {
-    throw new NotImplementedException();
+  async logout(req: Request, res: Response): Promise<{ message: string }> {
+    const accessToken = this.authCookieService.readAccessToken(req);
+    if (accessToken) {
+      const user = this.verifyOrNull(accessToken);
+      if (user) await this.tokenRevocationService.revokeToken(user.jti, user.exp);
+    }
+
+    const refreshToken = this.authCookieService.readRefreshToken(req);
+    if (refreshToken) await this.refreshTokenService.revoke(refreshToken);
+
+    this.authCookieService.clearSessionCookies(res);
+    return { message: 'Logged out' };
+  }
+
+  me(user: AuthUser): Promise<AccountProfile> {
+    return this.accountService.getActiveProfile(user.id);
+  }
+
+  signup(dto: SignupDto): Promise<AccountProfile> {
+    return this.accountService.signup(dto);
+  }
+
+  // Used by the users module (admin approves sign-ups)
+  listPendingAccounts(): Promise<PendingAccount[]> {
+    return this.accountService.listPending();
+  }
+
+  approveAccount(id: string, adminId: string): Promise<void> {
+    return this.accountService.approve(id, adminId);
+  }
+
+  private verifyOrNull(token: string): AuthUser | null {
+    try {
+      return this.tokenService.verifyAccessTokenIgnoringExpiry(token);
+    } catch {
+      return null; // forged or garbage: nothing to revoke
+    }
   }
 }
