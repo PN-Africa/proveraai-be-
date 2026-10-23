@@ -14,12 +14,14 @@ export class TransactionsService {
     private readonly ingestionService: IngestionService,
   ) {}
 
-  // Checks the header right away (400 if unusable), then processes the rows
-  // in the background. The frontend polls GET /uploads/:id for the result.
+  // Checks the header (400) and that this exact file is new (409) right away,
+  // then processes the rows in the background. The frontend polls
+  // GET /uploads/:id for the result.
   async upload(file: UploadedCsvFile | undefined, admin: AuthUser) {
     if (!file) throw new BadRequestException('Attach a CSV file in the "file" field');
     const columns = this.csvReaderService.readHeader(file.buffer);
-    const upload = await this.uploadBatchService.create(file.originalname, admin.id);
+    const fileHash = await this.uploadBatchService.assertNotUploadedBefore(file.buffer);
+    const upload = await this.uploadBatchService.create(file.originalname, fileHash, admin.id);
     void this.ingestionService.process(upload.id, file.buffer, columns);
     return { uploadId: upload.id, status: UploadStatus.PENDING };
   }

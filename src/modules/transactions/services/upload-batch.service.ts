@@ -1,4 +1,5 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { createHash } from 'node:crypto';
 import { RejectedRowModelAction } from '../model-actions/rejected-row-model-action.js';
 import { UploadBatchModelAction } from '../model-actions/upload-batch-model-action.js';
 import { UploadBatchModel } from '../models/upload-batch.model.js';
@@ -11,9 +12,23 @@ export class UploadBatchService {
     private readonly rejectedRowModelAction: RejectedRowModelAction,
   ) {}
 
-  create(fileName: string, uploadedById: string): Promise<UploadBatchModel> {
+  // Refuses a file whose exact content was already uploaded. Failed uploads
+  // don't count, so a file can be retried after a failure.
+  async assertNotUploadedBefore(file: Buffer): Promise<string> {
+    const fileHash = createHash('sha256').update(file).digest('hex');
+    const previous = await this.uploadBatchModelAction.findNotFailedByHash(fileHash);
+    if (previous) {
+      throw new ConflictException(
+        `This file was already uploaded (upload ${previous.id}, ${previous.createdAt.toISOString().slice(0, 10)})`,
+      );
+    }
+    return fileHash;
+  }
+
+  create(fileName: string, fileHash: string, uploadedById: string): Promise<UploadBatchModel> {
     return this.uploadBatchModelAction.create({
       fileName: fileName.slice(0, 255),
+      fileHash,
       uploadedById,
     });
   }

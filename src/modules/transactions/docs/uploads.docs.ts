@@ -34,6 +34,11 @@ export class UploadsDocs {
         description: 'No file, not a .csv, unreadable, or missing required columns',
       }),
       ADMIN_ONLY,
+      ApiResponse({
+        status: 409,
+        description:
+          'This exact file was already uploaded (and did not fail). The message names the earlier upload',
+      }),
       ApiResponse({ status: 413, description: 'File larger than 5 MB' }),
     );
   }

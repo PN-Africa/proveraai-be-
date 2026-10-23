@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Not, Repository } from 'typeorm';
 import { AbstractModel } from '../../../util/abstract-model-action.js';
 import { UploadStatus } from '../enums/upload-status.enum.js';
 import { UploadBatchModel } from '../models/upload-batch.model.js';
@@ -18,6 +18,14 @@ export class UploadBatchModelAction extends AbstractModel<UploadBatchModel> {
     private readonly uploadBatchRepository: Repository<UploadBatchModel>,
   ) {
     super(uploadBatchRepository, UploadBatchModel);
+  }
+
+  // The earliest upload of this content that did not fail
+  async findNotFailedByHash(fileHash: string): Promise<UploadBatchModel | null> {
+    return this.uploadBatchRepository.findOne({
+      where: { fileHash, status: Not(UploadStatus.FAILED) },
+      order: { createdAt: 'ASC' },
+    });
   }
 
   async markProcessing(id: string): Promise<void> {

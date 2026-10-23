@@ -7,6 +7,12 @@ export class UploadBatchModel extends BaseEntity {
   @Column({ length: 255 })
   fileName!: string;
 
+  // SHA-256 of the file's content, to refuse the same file twice.
+  // Null for uploads made before this was added.
+  @Index()
+  @Column({ type: 'char', length: 64, nullable: true })
+  fileHash!: string | null;
+
   @Index()
   @Column({ type: 'uuid' })
   uploadedById!: string;
