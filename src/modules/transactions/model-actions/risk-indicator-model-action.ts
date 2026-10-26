@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { QueryDeepPartialEntity, Repository } from 'typeorm';
+import { In, QueryDeepPartialEntity, Repository } from 'typeorm';
 import { AbstractModel } from '../../../util/abstract-model-action.js';
 import { RiskIndicatorModel } from '../models/risk-indicator.model.js';
 
@@ -18,6 +18,26 @@ export class RiskIndicatorModelAction extends AbstractModel<RiskIndicatorModel> 
     private readonly riskIndicatorRepository: Repository<RiskIndicatorModel>,
   ) {
     super(riskIndicatorRepository, RiskIndicatorModel);
+  }
+
+  findForTransaction(transactionId: string): Promise<RiskIndicatorModel[]> {
+    return this.riskIndicatorRepository.find({
+      where: { transactionId },
+      order: { weight: 'DESC', ruleKey: 'ASC' },
+    });
+  }
+
+  async findForTransactions(transactionIds: string[]): Promise<RiskIndicatorModel[]> {
+    const indicators: RiskIndicatorModel[] = [];
+    for (let i = 0; i < transactionIds.length; i += INSERT_CHUNK) {
+      indicators.push(
+        ...(await this.riskIndicatorRepository.find({
+          where: { transactionId: In(transactionIds.slice(i, i + INSERT_CHUNK)) },
+          order: { weight: 'DESC', ruleKey: 'ASC' },
+        })),
+      );
+    }
+    return indicators;
   }
 
   async insertMany(rows: NewRiskIndicator[]): Promise<void> {

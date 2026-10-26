@@ -1,6 +1,7 @@
-import { Column, Entity, Index, JoinColumn, ManyToOne } from 'typeorm';
+import { Column, Entity, Index, JoinColumn, ManyToOne, OneToOne, type Relation } from 'typeorm';
 import { BaseEntity } from '../../../database/base.model.js';
 import { RiskLevel } from '../../detection/enums/risk-level.enum.js';
+import { ReviewModel } from './review.model.js';
 import { UploadBatchModel } from './upload-batch.model.js';
 
 @Entity('transactions')
@@ -60,4 +61,7 @@ export class TransactionModel extends BaseEntity {
 
   @Column({ type: 'timestamptz', nullable: true })
   scoredAt!: Date | null;
+
+  @OneToOne(() => ReviewModel, (review) => review.transaction)
+  review?: Relation<ReviewModel> | null;
 }
