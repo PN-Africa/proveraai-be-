@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { In, QueryDeepPartialEntity, Repository } from 'typeorm';
 import { AbstractModel } from '../../../util/abstract-model-action.js';
 import { RiskIndicatorModel } from '../models/risk-indicator.model.js';
+import { inRange, type OccurredRange } from './transaction-model-action.js';
 
 export type NewRiskIndicator = Pick<
   RiskIndicatorModel,
@@ -38,6 +39,26 @@ export class RiskIndicatorModelAction extends AbstractModel<RiskIndicatorModel> 
       );
     }
     return indicators;
+  }
+
+  // Which rules fired most for transactions in the range. A rule keeps its
+  // ruleKey across versions; the name shown is from its latest firing.
+  countByRule(
+    range: OccurredRange,
+    limit: number,
+  ): Promise<{ ruleKey: string; ruleName: string; hits: string }[]> {
+    const query = this.riskIndicatorRepository
+      .createQueryBuilder('ri')
+      .innerJoin('ri.transaction', 't')
+      .select('ri.ruleKey', 'ruleKey')
+      .addSelect('(array_agg(ri.ruleName ORDER BY ri.createdAt DESC))[1]', 'ruleName')
+      .addSelect('count(*)', 'hits');
+    return inRange(query, range)
+      .groupBy('ri.ruleKey')
+      .orderBy('hits', 'DESC')
+      .addOrderBy('ri.ruleKey')
+      .limit(limit)
+      .getRawMany();
   }
 
   async insertMany(rows: NewRiskIndicator[]): Promise<void> {

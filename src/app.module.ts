@@ -13,6 +13,7 @@ import { dataSource } from './database/data-source.js';
 import { AuthModule } from './modules/auth/auth.module.js';
 import { UsersModule } from './modules/users/users.module.js';
 import { TransactionsModule } from './modules/transactions/transactions.module.js';
+import { DashboardModule } from './modules/dashboard/dashboard.module.js';
 // nest-kit:imports
 
 export const { ObserveModule, ObserveInstrument } = createObserveModule();
@@ -65,6 +66,7 @@ export const observeEnabled = Boolean(observeAppKey && observeAppSecret);
     AuthModule,
     UsersModule,
     TransactionsModule,
+    DashboardModule,
     // nest-kit:modules
   ],
   controllers: [AppController],

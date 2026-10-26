@@ -9,7 +9,9 @@ import { CsvReaderService, UploadedCsvFile } from './services/csv-reader.service
 import { CustomerHistoryExportService } from './services/customer-history-export.service.js';
 import { IngestionService } from './services/ingestion.service.js';
 import { ReviewService } from './services/review.service.js';
+import { TransactionStatsService, type TrendInterval } from './services/transaction-stats.service.js';
 import { TransactionViewService } from './services/transaction-view.service.js';
+import type { OccurredRange } from './model-actions/transaction-model-action.js';
 import { UploadBatchService } from './services/upload-batch.service.js';
 
 @Injectable()
@@ -21,6 +23,7 @@ export class TransactionsService {
     private readonly transactionViewService: TransactionViewService,
     private readonly reviewService: ReviewService,
     private readonly customerHistoryExportService: CustomerHistoryExportService,
+    private readonly transactionStatsService: TransactionStatsService,
   ) {}
 
   // Checks the header (400) and that this exact file is new (409) right away,
@@ -57,6 +60,14 @@ export class TransactionsService {
 
   exportCustomerHistory(id: string, range: DateRangeQueryDto, user: AuthUser) {
     return this.customerHistoryExportService.export(id, range, user);
+  }
+
+  getSummary(range: OccurredRange) {
+    return this.transactionStatsService.summary(range);
+  }
+
+  getTrend(range: OccurredRange, interval: TrendInterval) {
+    return this.transactionStatsService.trend(range, interval);
   }
 
   claimReview(id: string, analyst: AuthUser) {

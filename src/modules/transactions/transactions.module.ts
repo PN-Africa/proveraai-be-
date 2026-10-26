@@ -16,6 +16,7 @@ import { CustomerHistoryExportService } from './services/customer-history-export
 import { IngestionService } from './services/ingestion.service.js';
 import { ReviewService } from './services/review.service.js';
 import { RowValidatorService } from './services/row-validator.service.js';
+import { TransactionStatsService } from './services/transaction-stats.service.js';
 import { TransactionViewService } from './services/transaction-view.service.js';
 import { UploadBatchService } from './services/upload-batch.service.js';
 import { UploadScoringService } from './services/upload-scoring.service.js';
@@ -45,6 +46,7 @@ import { UploadsController } from './uploads.controller.js';
     TransactionViewService,
     ReviewService,
     CustomerHistoryExportService,
+    TransactionStatsService,
     UploadBatchModelAction,
     TransactionModelAction,
     RejectedRowModelAction,

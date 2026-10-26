@@ -1,8 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Between, In, Not, Repository } from 'typeorm';
+import { Between, In, Not, ObjectLiteral, Repository, SelectQueryBuilder } from 'typeorm';
 import { AbstractModel } from '../../../util/abstract-model-action.js';
 import { RiskLevel } from '../../detection/enums/risk-level.enum.js';
+import { ReviewDecision } from '../enums/review-decision.enum.js';
 import { ReviewStatus } from '../enums/review-status.enum.js';
 import { TransactionModel } from '../models/transaction.model.js';
 
@@ -29,6 +30,18 @@ export interface RiskResult {
   riskLevel: RiskLevel;
   flagged: boolean;
 }
+
+export interface OccurredRange {
+  from?: Date;
+  to?: Date;
+}
+
+// Limits a query on transactions (alias t) to an occurredAt range
+export const inRange = <T extends ObjectLiteral>(query: SelectQueryBuilder<T>, range: OccurredRange) => {
+  if (range.from) query.andWhere('t.occurredAt >= :from', { from: range.from });
+  if (range.to) query.andWhere('t.occurredAt <= :to', { to: range.to });
+  return query;
+};
 
 const CHUNK = 1000;
 
@@ -71,8 +84,7 @@ export class TransactionModelAction extends AbstractModel<TransactionModel> {
     if (filters.uploadId) query.andWhere('t.uploadId = :uploadId', { uploadId: filters.uploadId });
     if (filters.customerId) query.andWhere('t.customerId = :customerId', { customerId: filters.customerId });
     if (filters.type) query.andWhere('t.type = :type', { type: filters.type });
-    if (filters.from) query.andWhere('t.occurredAt >= :from', { from: filters.from });
-    if (filters.to) query.andWhere('t.occurredAt <= :to', { to: filters.to });
+    inRange(query, filters);
     if (filters.reviewStatus === ReviewStatus.OPEN) {
       query.andWhere('t.flagged = true AND r.id IS NULL');
     } else if (filters.reviewStatus) {
@@ -110,6 +122,51 @@ export class TransactionModelAction extends AbstractModel<TransactionModel> {
       .getOne();
   }
 
+  // Counts for the dashboard, in one pass. Postgres returns counts as strings.
+  summarize(range: OccurredRange): Promise<Record<string, string> | undefined> {
+    const query = this.transactionRepository
+      .createQueryBuilder('t')
+      .leftJoin('t.review', 'r')
+      .select('count(*)', 'total')
+      .addSelect('count(t.riskLevel)', 'scored')
+      .addSelect('count(*) FILTER (WHERE t.flagged)', 'flagged')
+      .addSelect('count(*) FILTER (WHERE t.riskLevel = :low)', 'low')
+      .addSelect('count(*) FILTER (WHERE t.riskLevel = :medium)', 'medium')
+      .addSelect('count(*) FILTER (WHERE t.riskLevel = :high)', 'high')
+      .addSelect('count(*) FILTER (WHERE t.flagged AND r.id IS NULL)', 'open')
+      .addSelect('count(*) FILTER (WHERE r.status = :inReview)', 'inReview')
+      .addSelect('count(*) FILTER (WHERE r.status = :closed)', 'closed')
+      .addSelect('count(*) FILTER (WHERE r.decision = :cleared)', 'cleared')
+      .addSelect('count(*) FILTER (WHERE r.decision = :escalated)', 'escalated')
+      .setParameters({
+        low: RiskLevel.LOW,
+        medium: RiskLevel.MEDIUM,
+        high: RiskLevel.HIGH,
+        inReview: ReviewStatus.IN_REVIEW,
+        closed: ReviewStatus.CLOSED,
+        cleared: ReviewDecision.CLEARED,
+        escalated: ReviewDecision.ESCALATED,
+      });
+    return inRange(query, range).getRawOne<Record<string, string>>();
+  }
+
+  // Counts per local day or week (period = its first day, YYYY-MM-DD).
+  // Periods with no transactions are not returned.
+  countByPeriod(
+    interval: 'day' | 'week',
+    timeZone: string,
+    range: Required<OccurredRange>,
+  ): Promise<{ period: string; total: string; flagged: string; high: string }[]> {
+    const query = this.transactionRepository
+      .createQueryBuilder('t')
+      .select(`to_char(date_trunc(:interval, t.occurredAt AT TIME ZONE :timeZone), 'YYYY-MM-DD')`, 'period')
+      .addSelect('count(*)', 'total')
+      .addSelect('count(*) FILTER (WHERE t.flagged)', 'flagged')
+      .addSelect('count(*) FILTER (WHERE t.riskLevel = :high)', 'high')
+      .setParameters({ interval, timeZone, high: RiskLevel.HIGH });
+    return inRange(query, range).groupBy('period').orderBy('period').getRawMany();
+  }
+
   // Oldest first, with the review status of each
   findCustomerTransactions(
     customerId: string,
@@ -121,9 +178,7 @@ export class TransactionModelAction extends AbstractModel<TransactionModel> {
       .createQueryBuilder('t')
       .leftJoinAndSelect('t.review', 'r')
       .where('t.customerId = :customerId', { customerId });
-    if (from) query.andWhere('t.occurredAt >= :from', { from });
-    if (to) query.andWhere('t.occurredAt <= :to', { to });
-    return query.orderBy('t.occurredAt', 'ASC').addOrderBy('t.id').take(take).getMany();
+    return inRange(query, { from, to }).orderBy('t.occurredAt', 'ASC').addOrderBy('t.id').take(take).getMany();
   }
 
   findForUpload(uploadId: string): Promise<TransactionModel[]> {
