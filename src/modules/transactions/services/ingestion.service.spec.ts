@@ -6,11 +6,17 @@ import { UploadBatchModelAction } from '../model-actions/upload-batch-model-acti
 import { CsvReaderService } from './csv-reader.service.js';
 import { IngestionService, MAX_STORED_REJECTIONS } from './ingestion.service.js';
 import { RowValidatorService } from './row-validator.service.js';
+import { UploadScoringService } from './upload-scoring.service.js';
 
 const HEADER = 'transactionId,amount,currency,timestamp,type';
 const row = (id: string, amount = '100') => `${id},${amount},NGN,2026-10-01T10:00:00Z,PAYMENT`;
 
-const setup = ({ alreadyStored = [] as string[], failInsert = false } = {}) => {
+const setup = ({
+  alreadyStored = [] as string[],
+  failInsert = false,
+  failScoring = false,
+  flagged = 0,
+} = {}) => {
   const stored: NewTransaction[] = [];
   const rejected: NewRejectedRow[] = [];
   const uploadBatchModelAction = {
@@ -31,6 +37,12 @@ const setup = ({ alreadyStored = [] as string[], failInsert = false } = {}) => {
       rejected.push(...rows);
     }),
   };
+  const uploadScoringService = {
+    scoreUpload: vi.fn(async () => {
+      if (failScoring) throw new Error('rules table missing');
+      return flagged;
+    }),
+  };
   const csvReaderService = new CsvReaderService();
   const service = new IngestionService(
     csvReaderService,
@@ -38,6 +50,7 @@ const setup = ({ alreadyStored = [] as string[], failInsert = false } = {}) => {
     uploadBatchModelAction as unknown as UploadBatchModelAction,
     transactionModelAction as unknown as TransactionModelAction,
     rejectedRowModelAction as unknown as RejectedRowModelAction,
+    uploadScoringService as unknown as UploadScoringService,
   );
   const run = (lines: string[]) => {
     const file = Buffer.from([HEADER, ...lines].join('\n'));
@@ -66,6 +79,7 @@ describe('IngestionService', () => {
       totalRows: 3,
       acceptedRows: 2,
       rejectedRows: 1,
+      flaggedRows: 0,
     });
   });
 
@@ -83,6 +97,7 @@ describe('IngestionService', () => {
       totalRows: 2,
       acceptedRows: 1,
       rejectedRows: 1,
+      flaggedRows: 0,
     });
   });
 
@@ -110,6 +125,24 @@ describe('IngestionService', () => {
     expect(uploadBatchModelAction.markFailed).toHaveBeenCalledWith(
       'upload-1',
       'Processing failed. Contact the team with the upload id.',
+    );
+  });
+
+  it('scores the upload after storing it and records the flagged count', async () => {
+    const { run, uploadBatchModelAction } = setup({ flagged: 2 });
+    await run([row('T1'), row('T2')]);
+    expect(uploadBatchModelAction.markCompleted).toHaveBeenCalledWith(
+      'upload-1',
+      expect.objectContaining({ acceptedRows: 2, flaggedRows: 2 }),
+    );
+  });
+
+  it('says the rows were stored when only scoring fails', async () => {
+    const { run, uploadBatchModelAction } = setup({ failScoring: true });
+    await run([row('T1')]);
+    expect(uploadBatchModelAction.markFailed).toHaveBeenCalledWith(
+      'upload-1',
+      'The transactions were stored, but risk scoring failed. Contact the team with the upload id.',
     );
   });
 });

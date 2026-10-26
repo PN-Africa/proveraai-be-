@@ -8,6 +8,7 @@ import { AppModule, ObserveInstrument, observeEnabled } from './app.module.js';
 import { GlobalExceptionFilter } from './common/filters/http-exception.filter.js';
 import { initializeDataSource } from './database/data-source.js';
 import { seedAccounts } from './database/seed-accounts.js';
+import { seedDetectionRules } from './database/seed-detection-rules.js';
 import { ACCESS_TOKEN_COOKIE } from './modules/auth/services/auth-cookie.service.js';
 
 async function bootstrap() {
@@ -72,6 +73,7 @@ async function bootstrap() {
 
     try {
       await seedAccounts();
+      await seedDetectionRules();
       logger.log('Database seeding completed!');
     } catch (seedError) {
       logger.error('Error during database seeding', seedError);

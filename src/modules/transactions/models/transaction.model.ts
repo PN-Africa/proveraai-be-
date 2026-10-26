@@ -1,5 +1,6 @@
 import { Column, Entity, Index, JoinColumn, ManyToOne } from 'typeorm';
 import { BaseEntity } from '../../../database/base.model.js';
+import { RiskLevel } from '../../detection/enums/risk-level.enum.js';
 import { UploadBatchModel } from './upload-batch.model.js';
 
 @Entity('transactions')
@@ -43,4 +44,20 @@ export class TransactionModel extends BaseEntity {
   // Extra columns from the file ("other relevant attributes")
   @Column({ type: 'jsonb', default: () => "'{}'" })
   attributes!: Record<string, string>;
+
+  // Set once by detection, never through the API (R-02). Null until scored.
+  @Column({ type: 'int', nullable: true })
+  riskScore!: number | null;
+
+  @Index()
+  @Column({ type: 'varchar', length: 10, nullable: true })
+  riskLevel!: RiskLevel | null;
+
+  // true = requires review, never "fraudulent"
+  @Index()
+  @Column({ default: false })
+  flagged!: boolean;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  scoredAt!: Date | null;
 }

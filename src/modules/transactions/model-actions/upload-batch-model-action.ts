@@ -9,6 +9,7 @@ export interface UploadCounts {
   totalRows: number;
   acceptedRows: number;
   rejectedRows: number;
+  flaggedRows: number;
 }
 
 @Injectable()

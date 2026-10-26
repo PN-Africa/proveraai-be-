@@ -11,6 +11,7 @@ import {
 } from '../model-actions/upload-batch-model-action.js';
 import { CsvReaderService } from './csv-reader.service.js';
 import { RowValidatorService, ValidatedRow } from './row-validator.service.js';
+import { UploadScoringService } from './upload-scoring.service.js';
 
 const CHUNK_SIZE = 500;
 // Every rejection is counted, but only this many are stored with reasons
@@ -22,7 +23,8 @@ interface PendingRow {
 }
 
 // Processes one upload in the background: validates every row, stores the
-// valid ones in chunks, records the rejected ones, and sets the final status
+// valid ones in chunks, records the rejected ones, scores the stored ones,
+// and sets the final status
 @Injectable()
 export class IngestionService {
   private readonly logger = new Logger(IngestionService.name);
@@ -33,15 +35,19 @@ export class IngestionService {
     private readonly uploadBatchModelAction: UploadBatchModelAction,
     private readonly transactionModelAction: TransactionModelAction,
     private readonly rejectedRowModelAction: RejectedRowModelAction,
+    private readonly uploadScoringService: UploadScoringService,
   ) {}
 
   async process(uploadId: string, file: Buffer, columns: string[]): Promise<void> {
+    let scoring = false;
     try {
       await this.uploadBatchModelAction.markProcessing(uploadId);
       const counts = await this.ingest(uploadId, file, columns);
+      scoring = true;
+      counts.flaggedRows = await this.uploadScoringService.scoreUpload(uploadId);
       await this.uploadBatchModelAction.markCompleted(uploadId, counts);
       this.logger.log(
-        `Upload ${uploadId} completed: ${counts.acceptedRows} accepted, ${counts.rejectedRows} rejected`,
+        `Upload ${uploadId} completed: ${counts.acceptedRows} accepted, ${counts.rejectedRows} rejected, ${counts.flaggedRows} flagged`,
       );
     } catch (err) {
       this.logger.error(
@@ -52,7 +58,9 @@ export class IngestionService {
       const message =
         err instanceof CsvError
           ? `The file could not be read: ${err.message}`
-          : 'Processing failed. Contact the team with the upload id.';
+          : scoring
+            ? 'The transactions were stored, but risk scoring failed. Contact the team with the upload id.'
+            : 'Processing failed. Contact the team with the upload id.';
       await this.uploadBatchModelAction
         .markFailed(uploadId, message)
         .catch((markErr: unknown) =>
@@ -62,7 +70,7 @@ export class IngestionService {
   }
 
   private async ingest(uploadId: string, file: Buffer, columns: string[]): Promise<UploadCounts> {
-    const counts: UploadCounts = { totalRows: 0, acceptedRows: 0, rejectedRows: 0 };
+    const counts: UploadCounts = { totalRows: 0, acceptedRows: 0, rejectedRows: 0, flaggedRows: 0 };
     const seenInFile = new Set<string>();
     let pending: PendingRow[] = [];
     let rejections: NewRejectedRow[] = [];

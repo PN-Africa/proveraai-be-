@@ -29,6 +29,9 @@ export class UploadBatchModel extends BaseEntity {
   @Column({ type: 'int', default: 0 })
   rejectedRows!: number;
 
+  @Column({ type: 'int', default: 0 })
+  flaggedRows!: number;
+
   // Why a FAILED upload failed, safe to show to the uploader
   @Column({ type: 'text', nullable: true })
   error!: string | null;
