@@ -47,6 +47,16 @@ const CUSTOMER_RULES = new Set([
   RuleType.NEAR_DUPLICATE,
 ]);
 
+// The parameters each rule type accepts
+export const PARAM_KEYS: Record<RuleType, string[]> = {
+  [RuleType.HIGH_AMOUNT]: ['threshold', 'currency'],
+  [RuleType.AMOUNT_DEVIATION]: ['multiplier', 'minHistory', 'baselineSize'],
+  [RuleType.VELOCITY]: ['windowMinutes', 'maxCount', 'maxTotal'],
+  [RuleType.NEW_CONTEXT]: ['field', 'minHistory'],
+  [RuleType.NEAR_DUPLICATE]: ['windowMinutes'],
+  [RuleType.ODD_HOURS]: ['startHour', 'endHour', 'utcOffsetMinutes'],
+};
+
 const FIELD_LABELS: Record<string, string> = {
   location: 'location',
   paymentMethod: 'payment method',
@@ -101,6 +111,17 @@ export class RuleEvaluatorService {
         return [];
       }
     });
+  }
+
+  // Throws a readable error if a rule of this type could not run with these
+  // parameters. Used before saving a rule, so a bad edit never reaches scoring.
+  validate(type: RuleType, params: Record<string, unknown>): void {
+    const allowed = PARAM_KEYS[type];
+    const unknown = Object.keys(params).filter((key) => !allowed.includes(key));
+    if (unknown.length > 0) {
+      throw new Error(`Unknown parameters for ${type}: ${unknown.join(', ')}. Allowed: ${allowed.join(', ')}`);
+    }
+    this.build({ type, params } as DetectionRuleModel);
   }
 
   // targets are scored; history only provides context. Each transaction is
@@ -185,12 +206,16 @@ export class RuleEvaluatorService {
       }
       case RuleType.NEAR_DUPLICATE:
         return this.nearDuplicate(positiveNumber(p, 'windowMinutes'));
-      case RuleType.ODD_HOURS:
-        return this.oddHours(
-          positiveNumber(p, 'startHour'),
-          positiveNumber(p, 'endHour'),
-          typeof p.utcOffsetMinutes === 'number' ? p.utcOffsetMinutes : 0,
-        );
+      case RuleType.ODD_HOURS: {
+        const startHour = positiveNumber(p, 'startHour');
+        const endHour = positiveNumber(p, 'endHour');
+        if (startHour > 24 || endHour > 24) throw new Error('startHour and endHour must be 0 to 24');
+        const offset = p.utcOffsetMinutes ?? 0;
+        if (typeof offset !== 'number' || !Number.isInteger(offset) || offset < -720 || offset > 840) {
+          throw new Error('utcOffsetMinutes must be a whole number from -720 to 840');
+        }
+        return this.oddHours(startHour, endHour, offset);
+      }
       default:
         throw new Error(`unknown rule type ${String(rule.type)}`);
     }

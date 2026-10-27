@@ -3,13 +3,17 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { DetectionService } from './detection.service.js';
 import { DetectionRuleModelAction } from './model-actions/detection-rule-model-action.js';
 import { DetectionRuleModel } from './models/detection-rule.model.js';
+import { RulesController } from './rules.controller.js';
+import { RulesService } from './rules.service.js';
 import { RiskScorerService } from './services/risk-scorer.service.js';
 import { RuleEvaluatorService } from './services/rule-evaluator.service.js';
 
 @Module({
   imports: [TypeOrmModule.forFeature([DetectionRuleModel])],
+  controllers: [RulesController],
   providers: [
     DetectionService,
+    RulesService,
     RuleEvaluatorService,
     RiskScorerService,
     DetectionRuleModelAction,

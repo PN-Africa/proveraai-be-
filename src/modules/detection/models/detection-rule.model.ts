@@ -26,6 +26,11 @@ export class DetectionRuleModel extends BaseEntity {
   @Column({ type: 'int' })
   weight!: number;
 
+  // Only the latest version of a rule can be active
   @Column({ default: true })
   isActive!: boolean;
+
+  // The admin who saved this version. Null for seeded rules.
+  @Column({ type: 'uuid', nullable: true })
+  createdById!: string | null;
 }

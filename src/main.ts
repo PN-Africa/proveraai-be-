@@ -61,6 +61,7 @@ async function bootstrap() {
     .addTag('uploads')
     .addTag('transactions')
     .addTag('dashboard')
+    .addTag('rules')
     .addCookieAuth(ACCESS_TOKEN_COOKIE)
     .build();
   const documentFactory = () => SwaggerModule.createDocument(app, config);

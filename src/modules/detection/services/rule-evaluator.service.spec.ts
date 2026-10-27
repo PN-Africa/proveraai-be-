@@ -163,6 +163,18 @@ describe('RuleEvaluatorService', () => {
     expect(service.prepare([broken, working]).map((p) => p.rule)).toEqual([working]);
   });
 
+  it('validates parameters before a rule is saved', () => {
+    expect(() => service.validate(RuleType.VELOCITY, { windowMinutes: 10, maxCount: 4 })).not.toThrow();
+    expect(() => service.validate(RuleType.VELOCITY, { windowMinutes: 10 })).toThrow('maxCount or maxTotal is required');
+    expect(() => service.validate(RuleType.ODD_HOURS, { startHour: 0, endHour: 25 })).toThrow('0 to 24');
+    expect(() => service.validate(RuleType.ODD_HOURS, { startHour: 0, endHour: 5, utcOffsetMinutes: 1e6 })).toThrow(
+      'utcOffsetMinutes',
+    );
+    expect(() => service.validate(RuleType.NEAR_DUPLICATE, { windowMinutes: 10, extra: 1 })).toThrow(
+      'Unknown parameters for NEAR_DUPLICATE: extra',
+    );
+  });
+
   it('records which rule version fired', () => {
     const [hit] = fire(rule(RuleType.ODD_HOURS, { startHour: 0, endHour: 24 }, 15), tx());
     expect(hit).toMatchObject({ ruleId: 'rule-ODD_HOURS', ruleKey: 'odd_hours', weight: 15 });
