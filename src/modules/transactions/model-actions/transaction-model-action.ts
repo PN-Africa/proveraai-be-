@@ -1,10 +1,19 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Between, In, Not, ObjectLiteral, Repository, SelectQueryBuilder } from 'typeorm';
+import {
+  Between,
+  EntityManager,
+  In,
+  IsNull,
+  ObjectLiteral,
+  Repository,
+  SelectQueryBuilder,
+} from 'typeorm';
 import { AbstractModel } from '../../../util/abstract-model-action.js';
 import { RiskLevel } from '../../detection/enums/risk-level.enum.js';
 import { ReviewDecision } from '../enums/review-decision.enum.js';
 import { ReviewStatus } from '../enums/review-status.enum.js';
+import { UploadStatus } from '../enums/upload-status.enum.js';
 import { TransactionModel } from '../models/transaction.model.js';
 
 export type NewTransaction = Omit<
@@ -185,20 +194,50 @@ export class TransactionModelAction extends AbstractModel<TransactionModel> {
     return this.transactionRepository.find({ where: { uploadId } });
   }
 
-  // Earlier context for the given customers from other uploads
-  async findCustomerHistory(
-    customerIds: string[],
-    excludeUploadId: string,
-    from: Date,
-    to: Date,
-  ): Promise<TransactionModel[]> {
+  // Claimed or reviewed transactions keep the score the analyst saw
+  findUnreviewedForUpload(uploadId: string): Promise<TransactionModel[]> {
+    return this.transactionRepository
+      .createQueryBuilder('t')
+      .leftJoin('t.review', 'r')
+      .where('t.uploadId = :uploadId', { uploadId })
+      .andWhere('r.id IS NULL')
+      .getMany();
+  }
+
+  findUnscoredForUpload(uploadId: string): Promise<TransactionModel[]> {
+    return this.transactionRepository.find({ where: { uploadId, riskLevel: IsNull() } });
+  }
+
+  // Uploads that finished (or failed after storing rows) but have
+  // transactions without a score. Uploads still processing are left alone.
+  async findUploadIdsWithUnscored(): Promise<string[]> {
+    const rows = await this.transactionRepository
+      .createQueryBuilder('t')
+      .innerJoin('t.upload', 'u')
+      .select('DISTINCT t.uploadId', 'uploadId')
+      .where('t.riskLevel IS NULL')
+      .andWhere('u.status IN (:...statuses)', {
+        statuses: [UploadStatus.COMPLETED, UploadStatus.FAILED],
+      })
+      .getRawMany<{ uploadId: string }>();
+    return rows.map((r) => r.uploadId);
+  }
+
+  countForUpload(uploadId: string, onlyFlagged = false): Promise<number> {
+    return this.transactionRepository.count({
+      where: { uploadId, ...(onlyFlagged && { flagged: true }) },
+    });
+  }
+
+  // Context for the given customers. May include the transactions being
+  // scored; the evaluator counts each transaction once.
+  async findCustomerHistory(customerIds: string[], from: Date, to: Date): Promise<TransactionModel[]> {
     const history: TransactionModel[] = [];
     for (let i = 0; i < customerIds.length; i += CHUNK) {
       history.push(
         ...(await this.transactionRepository.find({
           where: {
             customerId: In(customerIds.slice(i, i + CHUNK)),
-            uploadId: Not(excludeUploadId),
             occurredAt: Between(from, to),
           },
         })),
@@ -208,10 +247,11 @@ export class TransactionModelAction extends AbstractModel<TransactionModel> {
   }
 
   // One parameterised statement per chunk instead of one UPDATE per row
-  async saveRiskResults(results: RiskResult[]): Promise<void> {
+  async saveRiskResults(results: RiskResult[], manager?: EntityManager): Promise<void> {
+    const repository = this.getRepository(manager);
     for (let i = 0; i < results.length; i += CHUNK) {
       const chunk = results.slice(i, i + CHUNK);
-      await this.transactionRepository.query(
+      await repository.query(
         `UPDATE "transactions" AS t
          SET "riskScore" = v.score, "riskLevel" = v.level, "flagged" = v.flagged, "scoredAt" = now()
          FROM unnest($1::uuid[], $2::int[], $3::varchar[], $4::boolean[]) AS v(id, score, level, flagged)

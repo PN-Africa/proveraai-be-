@@ -39,11 +39,11 @@ export class IngestionService {
   ) {}
 
   async process(uploadId: string, file: Buffer, columns: string[]): Promise<void> {
-    let scoring = false;
+    // Set once the rows are stored, so a scoring failure keeps the counts
+    let counts: UploadCounts | undefined;
     try {
       await this.uploadBatchModelAction.markProcessing(uploadId);
-      const counts = await this.ingest(uploadId, file, columns);
-      scoring = true;
+      counts = await this.ingest(uploadId, file, columns);
       counts.flaggedRows = await this.uploadScoringService.scoreUpload(uploadId);
       await this.uploadBatchModelAction.markCompleted(uploadId, counts);
       this.logger.log(
@@ -58,11 +58,11 @@ export class IngestionService {
       const message =
         err instanceof CsvError
           ? `The file could not be read: ${err.message}`
-          : scoring
-            ? 'The transactions were stored, but risk scoring failed. Contact the team with the upload id.'
+          : counts
+            ? 'The transactions were stored, but risk scoring failed. An admin can rescore this upload.'
             : 'Processing failed. Contact the team with the upload id.';
       await this.uploadBatchModelAction
-        .markFailed(uploadId, message)
+        .markFailed(uploadId, message, counts)
         .catch((markErr: unknown) =>
           this.logger.error(`Could not mark upload ${uploadId} as failed: ${String(markErr)}`),
         );

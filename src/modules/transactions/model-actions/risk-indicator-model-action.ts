@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, QueryDeepPartialEntity, Repository } from 'typeorm';
+import { EntityManager, In, QueryDeepPartialEntity, Repository } from 'typeorm';
 import { AbstractModel } from '../../../util/abstract-model-action.js';
 import { RiskIndicatorModel } from '../models/risk-indicator.model.js';
 import { inRange, type OccurredRange } from './transaction-model-action.js';
@@ -61,10 +61,18 @@ export class RiskIndicatorModelAction extends AbstractModel<RiskIndicatorModel> 
       .getRawMany();
   }
 
-  async insertMany(rows: NewRiskIndicator[]): Promise<void> {
+  async deleteForTransactions(transactionIds: string[], manager?: EntityManager): Promise<void> {
+    const repository = this.getRepository(manager);
+    for (let i = 0; i < transactionIds.length; i += INSERT_CHUNK) {
+      await repository.delete({ transactionId: In(transactionIds.slice(i, i + INSERT_CHUNK)) });
+    }
+  }
+
+  async insertMany(rows: NewRiskIndicator[], manager?: EntityManager): Promise<void> {
+    const repository = this.getRepository(manager);
     for (let i = 0; i < rows.length; i += INSERT_CHUNK) {
       // details is free-form JSON, which TypeORM's insert type cannot express
-      await this.riskIndicatorRepository.insert(
+      await repository.insert(
         rows.slice(i, i + INSERT_CHUNK) as QueryDeepPartialEntity<RiskIndicatorModel>[],
       );
     }

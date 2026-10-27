@@ -13,6 +13,7 @@ import { TransactionModel } from './models/transaction.model.js';
 import { UploadBatchModel } from './models/upload-batch.model.js';
 import { CsvReaderService } from './services/csv-reader.service.js';
 import { CustomerHistoryExportService } from './services/customer-history-export.service.js';
+import { DetectionRunService } from './services/detection-run.service.js';
 import { IngestionService } from './services/ingestion.service.js';
 import { ReviewService } from './services/review.service.js';
 import { RowValidatorService } from './services/row-validator.service.js';
@@ -47,6 +48,7 @@ import { UploadsController } from './uploads.controller.js';
     ReviewService,
     CustomerHistoryExportService,
     TransactionStatsService,
+    DetectionRunService,
     UploadBatchModelAction,
     TransactionModelAction,
     RejectedRowModelAction,

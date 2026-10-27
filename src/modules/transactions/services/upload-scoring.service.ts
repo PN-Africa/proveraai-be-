@@ -1,11 +1,12 @@
 import { Injectable } from '@nestjs/common';
+import { DataSource } from 'typeorm';
 import { DetectionService } from '../../detection/detection.service.js';
 import type { ScoringTransaction } from '../../detection/services/rule-evaluator.service.js';
 import { RiskIndicatorModelAction } from '../model-actions/risk-indicator-model-action.js';
 import { TransactionModelAction } from '../model-actions/transaction-model-action.js';
 import { TransactionModel } from '../models/transaction.model.js';
 
-// How far back other uploads are searched for a customer's history
+// How far back a customer's history is searched
 const HISTORY_DAYS = 90;
 const DAY_MS = 86_400_000;
 
@@ -22,19 +23,35 @@ const toScoring = (t: TransactionModel): ScoringTransaction => ({
   attributes: t.attributes ?? {},
 });
 
-// Scores every transaction of an upload and stores the results.
-// Returns how many were flagged.
+export interface ScoringCounts {
+  scored: number;
+  flagged: number;
+}
+
+// Scores transactions with the active rules and stores the results. Used by
+// ingestion and by manual detection runs.
 @Injectable()
 export class UploadScoringService {
   constructor(
+    private readonly dataSource: DataSource,
     private readonly detectionService: DetectionService,
     private readonly transactionModelAction: TransactionModelAction,
     private readonly riskIndicatorModelAction: RiskIndicatorModelAction,
   ) {}
 
+  // Returns how many were flagged
   async scoreUpload(uploadId: string): Promise<number> {
-    const targets = (await this.transactionModelAction.findForUpload(uploadId)).map(toScoring);
-    if (targets.length === 0) return 0;
+    const { flagged } = await this.score(await this.transactionModelAction.findForUpload(uploadId));
+    return flagged;
+  }
+
+  // Each transaction is compared with the customer's history in the 90 days
+  // before it, whichever upload it came in, so the result does not depend on
+  // the order files were uploaded. Old indicators are replaced in the same
+  // database transaction as the new scores.
+  async score(transactions: TransactionModel[]): Promise<ScoringCounts> {
+    const targets = transactions.map(toScoring);
+    if (targets.length === 0) return { scored: 0, flagged: 0 };
 
     const customerIds = [...new Set(targets.flatMap((t) => (t.customerId ? [t.customerId] : [])))];
     let earliest = Infinity;
@@ -46,19 +63,25 @@ export class UploadScoringService {
     const history = (
       await this.transactionModelAction.findCustomerHistory(
         customerIds,
-        uploadId,
         new Date(earliest - HISTORY_DAYS * DAY_MS),
         new Date(latest),
       )
     ).map(toScoring);
 
     const results = await this.detectionService.scoreBatch(targets, history);
-    await this.riskIndicatorModelAction.insertMany(
-      results.flatMap((r) =>
-        r.indicators.map((indicator) => ({ transactionId: r.id, ...indicator })),
-      ),
-    );
-    await this.transactionModelAction.saveRiskResults(results);
-    return results.filter((r) => r.flagged).length;
+    await this.dataSource.transaction(async (manager) => {
+      await this.riskIndicatorModelAction.deleteForTransactions(
+        targets.map((t) => t.id),
+        manager,
+      );
+      await this.riskIndicatorModelAction.insertMany(
+        results.flatMap((r) =>
+          r.indicators.map((indicator) => ({ transactionId: r.id, ...indicator })),
+        ),
+        manager,
+      );
+      await this.transactionModelAction.saveRiskResults(results, manager);
+    });
+    return { scored: results.length, flagged: results.filter((r) => r.flagged).length };
   }
 }

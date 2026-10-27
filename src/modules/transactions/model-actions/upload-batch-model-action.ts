@@ -44,11 +44,25 @@ export class UploadBatchModelAction extends AbstractModel<UploadBatchModel> {
     });
   }
 
-  async markFailed(id: string, error: string): Promise<void> {
+  // counts are kept when rows were stored before the failure
+  async markFailed(id: string, error: string, counts?: UploadCounts): Promise<void> {
     await this.uploadBatchRepository.update(id, {
+      ...counts,
       status: UploadStatus.FAILED,
       error,
       completedAt: new Date(),
+    });
+  }
+
+  // After a manual detection run
+  async markRescored(
+    id: string,
+    counts: Partial<Pick<UploadCounts, 'acceptedRows' | 'flaggedRows'>>,
+    completed: boolean,
+  ): Promise<void> {
+    await this.uploadBatchRepository.update(id, {
+      ...counts,
+      ...(completed && { status: UploadStatus.COMPLETED, error: null }),
     });
   }
 }

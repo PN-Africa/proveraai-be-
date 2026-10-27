@@ -125,6 +125,7 @@ describe('IngestionService', () => {
     expect(uploadBatchModelAction.markFailed).toHaveBeenCalledWith(
       'upload-1',
       'Processing failed. Contact the team with the upload id.',
+      undefined,
     );
   });
 
@@ -142,7 +143,8 @@ describe('IngestionService', () => {
     await run([row('T1')]);
     expect(uploadBatchModelAction.markFailed).toHaveBeenCalledWith(
       'upload-1',
-      'The transactions were stored, but risk scoring failed. Contact the team with the upload id.',
+      'The transactions were stored, but risk scoring failed. An admin can rescore this upload.',
+      { totalRows: 1, acceptedRows: 1, rejectedRows: 0, flaggedRows: 0 },
     );
   });
 });

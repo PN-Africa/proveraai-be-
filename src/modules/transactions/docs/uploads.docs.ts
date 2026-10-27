@@ -43,6 +43,41 @@ export class UploadsDocs {
     );
   }
 
+  static Rescore() {
+    return applyDecorators(
+      ApiOperation({
+        summary: 'Re-run detection for an upload with the current rules (admin only)',
+        description:
+          'Replaces the score, level and reasons of every transaction in the upload, except those ' +
+          'claimed or reviewed by an analyst, which keep the score the analyst saw. ' +
+          'An upload that failed only at scoring becomes COMPLETED. Rule changes never rescore on their own.',
+      }),
+      ApiCookieAuth(),
+      ApiResponse({ status: 200, description: '{ uploads, scored, flagged, skippedReviewed }' }),
+      ADMIN_ONLY,
+      ApiResponse({ status: 404, description: 'Upload not found' }),
+      ApiResponse({
+        status: 409,
+        description: 'Still processing, no stored transactions, or another detection run is in progress',
+      }),
+    );
+  }
+
+  static ScoreUnscored() {
+    return applyDecorators(
+      ApiOperation({
+        summary: 'Score every transaction that has no score yet (admin only)',
+        description:
+          'For data stored before detection ran, or uploads where scoring failed. ' +
+          'Already scored transactions are not touched. Uploads still processing are skipped.',
+      }),
+      ApiCookieAuth(),
+      ApiResponse({ status: 200, description: '{ uploads, scored, flagged, skippedReviewed: 0 }' }),
+      ADMIN_ONLY,
+      ApiResponse({ status: 409, description: 'Another detection run is in progress' }),
+    );
+  }
+
   static List() {
     return applyDecorators(
       ApiOperation({ summary: 'List uploads, newest first (admin only)' }),

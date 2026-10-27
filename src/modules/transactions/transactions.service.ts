@@ -7,6 +7,7 @@ import { ReviewDecisionDto } from './dtos/review-decision.dto.js';
 import { UploadStatus } from './enums/upload-status.enum.js';
 import { CsvReaderService, UploadedCsvFile } from './services/csv-reader.service.js';
 import { CustomerHistoryExportService } from './services/customer-history-export.service.js';
+import { DetectionRunService } from './services/detection-run.service.js';
 import { IngestionService } from './services/ingestion.service.js';
 import { ReviewService } from './services/review.service.js';
 import { TransactionStatsService, type TrendInterval } from './services/transaction-stats.service.js';
@@ -24,6 +25,7 @@ export class TransactionsService {
     private readonly reviewService: ReviewService,
     private readonly customerHistoryExportService: CustomerHistoryExportService,
     private readonly transactionStatsService: TransactionStatsService,
+    private readonly detectionRunService: DetectionRunService,
   ) {}
 
   // Checks the header (400) and that this exact file is new (409) right away,
@@ -48,6 +50,14 @@ export class TransactionsService {
 
   listRejectedRows(id: string, query: PaginationQueryDto) {
     return this.uploadBatchService.listRejected(id, query.page ?? 1, query.limit ?? 20);
+  }
+
+  rescoreUpload(id: string, admin: AuthUser) {
+    return this.detectionRunService.rescoreUpload(id, admin);
+  }
+
+  scoreUnscored(admin: AuthUser) {
+    return this.detectionRunService.scoreUnscored(admin);
   }
 
   listTransactions(query: ListTransactionsQueryDto, user: AuthUser) {

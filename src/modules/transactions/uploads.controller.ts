@@ -58,6 +58,22 @@ export class UploadsController {
     return this.transactionsService.upload(file, admin);
   }
 
+  @Post('score-unscored')
+  @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
+  @UploadsDocs.ScoreUnscored()
+  scoreUnscored(@CurrentUser() admin: AuthUser) {
+    return this.transactionsService.scoreUnscored(admin);
+  }
+
+  @Post(':id/rescore')
+  @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
+  @UploadsDocs.Rescore()
+  rescore(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() admin: AuthUser) {
+    return this.transactionsService.rescoreUpload(id, admin);
+  }
+
   @Get()
   @UploadsDocs.List()
   list(@Query() query: PaginationQueryDto) {
