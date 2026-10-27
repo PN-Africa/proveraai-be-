@@ -10,6 +10,7 @@ import { CommonModule } from './common/common.module.js';
 import { REDIS_CLIENT } from './common/redis/redis.constants.js';
 import { RedisThrottlerStorage } from './common/redis/redis-throttler-storage.js';
 import { dataSource } from './database/data-source.js';
+import { AuditModule } from './modules/audit/audit.module.js';
 import { AuthModule } from './modules/auth/auth.module.js';
 import { UsersModule } from './modules/users/users.module.js';
 import { TransactionsModule } from './modules/transactions/transactions.module.js';
@@ -63,6 +64,7 @@ export const observeEnabled = Boolean(observeAppKey && observeAppSecret);
     }),
 
     // Feature modules
+    AuditModule,
     AuthModule,
     UsersModule,
     TransactionsModule,

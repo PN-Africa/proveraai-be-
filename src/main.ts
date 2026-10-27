@@ -6,6 +6,7 @@ import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 import { AppModule, ObserveInstrument, observeEnabled } from './app.module.js';
 import { GlobalExceptionFilter } from './common/filters/http-exception.filter.js';
+import { requestContextMiddleware } from './common/request-context/request-context.js';
 import { initializeDataSource } from './database/data-source.js';
 import { seedAccounts } from './database/seed-accounts.js';
 import { seedDetectionRules } from './database/seed-detection-rules.js';
@@ -21,6 +22,9 @@ async function bootstrap() {
   // real client (rate limits and login logs depend on it)
   const trustProxy = Number(process.env.TRUST_PROXY ?? 0);
   if (trustProxy > 0) app.set('trust proxy', trustProxy);
+
+  // Makes the current request (user, IP) available to the audit log
+  app.use(requestContextMiddleware);
 
   app.use(cookieParser());
 
@@ -62,6 +66,7 @@ async function bootstrap() {
     .addTag('transactions')
     .addTag('dashboard')
     .addTag('rules')
+    .addTag('audit')
     .addCookieAuth(ACCESS_TOKEN_COOKIE)
     .build();
   const documentFactory = () => SwaggerModule.createDocument(app, config);

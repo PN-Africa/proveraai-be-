@@ -1,3 +1,4 @@
+import { AuditService } from '../../audit/audit.service.js';
 import type { AuthUser } from '../../../common/decorators/current-user.decorator.js';
 import { Role } from '../../auth/enums/role.enum.js';
 import { RiskLevel } from '../../detection/enums/risk-level.enum.js';
@@ -35,6 +36,7 @@ const setup = (t: TransactionModel | null = transaction()) => {
   const service = new TransactionViewService(
     transactionModelAction as unknown as TransactionModelAction,
     riskIndicatorModelAction as unknown as RiskIndicatorModelAction,
+    { record: vi.fn() } as unknown as AuditService,
   );
   return { service, transactionModelAction };
 };

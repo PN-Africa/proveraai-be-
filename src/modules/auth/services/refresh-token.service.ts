@@ -1,6 +1,8 @@
 import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import { AuditService } from '../../audit/audit.service.js';
+import { AuditAction } from '../../audit/enums/audit-action.enum.js';
 import { RefreshTokenModelAction } from '../model-actions/refresh-token-model-action.js';
 import type { IssuedToken } from './token.service.js';
 
@@ -15,6 +17,7 @@ export class RefreshTokenService {
   constructor(
     private readonly refreshTokenModelAction: RefreshTokenModelAction,
     private readonly config: ConfigService,
+    private readonly auditService: AuditService,
   ) {}
 
   async issue(
@@ -49,6 +52,11 @@ export class RefreshTokenService {
       this.logger.warn(
         `Refresh token reuse detected, family revoked: account=${stored.accountId} family=${stored.familyId}`,
       );
+      await this.auditService.record({
+        action: AuditAction.REFRESH_REUSE,
+        actorId: stored.accountId,
+        metadata: { familyId: stored.familyId },
+      });
       throw new UnauthorizedException();
     }
 

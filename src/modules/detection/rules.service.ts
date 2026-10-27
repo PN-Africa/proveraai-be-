@@ -8,6 +8,8 @@ import {
 import { isDeepStrictEqual } from 'node:util';
 import { DataSource, QueryFailedError } from 'typeorm';
 import type { AuthUser } from '../../common/decorators/current-user.decorator.js';
+import { AuditService } from '../audit/audit.service.js';
+import { AuditAction } from '../audit/enums/audit-action.enum.js';
 import { UpdateRuleDto } from './dtos/update-rule.dto.js';
 import { DetectionRuleModelAction } from './model-actions/detection-rule-model-action.js';
 import { DetectionRuleModel } from './models/detection-rule.model.js';
@@ -39,6 +41,7 @@ export class RulesService {
     private readonly dataSource: DataSource,
     private readonly detectionRuleModelAction: DetectionRuleModelAction,
     private readonly ruleEvaluatorService: RuleEvaluatorService,
+    private readonly auditService: AuditService,
   ) {}
 
   async list() {
@@ -99,10 +102,18 @@ export class RulesService {
       }
       throw err;
     }
-    this.logger.log(
-      `Rule ${ruleKey} v${current.version} -> v${saved.version} by=${admin.id}: ` +
-        JSON.stringify({ before: { name: current.name, params: current.params, weight: current.weight }, after: next }),
-    );
+    this.logger.log(`Rule ${ruleKey} v${current.version} -> v${saved.version} by=${admin.id}`);
+    await this.auditService.record({
+      action: AuditAction.RULE_UPDATED,
+      entityType: 'rule',
+      entityId: ruleKey,
+      metadata: {
+        fromVersion: current.version,
+        toVersion: saved.version,
+        before: { name: current.name, params: current.params, weight: current.weight },
+        after: next,
+      },
+    });
     return toRuleView(saved);
   }
 
@@ -111,6 +122,12 @@ export class RulesService {
     if (current.isActive !== isActive) {
       await this.detectionRuleModelAction.setActive(current.id, isActive);
       this.logger.log(`Rule ${ruleKey} v${current.version} ${isActive ? 'activated' : 'deactivated'} by=${admin.id}`);
+      await this.auditService.record({
+        action: isActive ? AuditAction.RULE_ACTIVATED : AuditAction.RULE_DEACTIVATED,
+        entityType: 'rule',
+        entityId: ruleKey,
+        metadata: { version: current.version },
+      });
       current.isActive = isActive;
     }
     return toRuleView(current);

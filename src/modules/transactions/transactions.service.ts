@@ -1,5 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import type { AuthUser } from '../../common/decorators/current-user.decorator.js';
+import { AuditService } from '../audit/audit.service.js';
+import { AuditAction } from '../audit/enums/audit-action.enum.js';
 import { DateRangeQueryDto } from './dtos/date-range-query.dto.js';
 import { ListTransactionsQueryDto } from './dtos/list-transactions-query.dto.js';
 import { PaginationQueryDto } from './dtos/pagination-query.dto.js';
@@ -26,6 +28,7 @@ export class TransactionsService {
     private readonly customerHistoryExportService: CustomerHistoryExportService,
     private readonly transactionStatsService: TransactionStatsService,
     private readonly detectionRunService: DetectionRunService,
+    private readonly auditService: AuditService,
   ) {}
 
   // Checks the header (400) and that this exact file is new (409) right away,
@@ -36,6 +39,12 @@ export class TransactionsService {
     const columns = this.csvReaderService.readHeader(file.buffer);
     const fileHash = await this.uploadBatchService.assertNotUploadedBefore(file.buffer);
     const upload = await this.uploadBatchService.create(file.originalname, fileHash, admin.id);
+    await this.auditService.record({
+      action: AuditAction.UPLOAD_CREATED,
+      entityType: 'upload',
+      entityId: upload.id,
+      metadata: { fileName: upload.fileName, bytes: file.size, fileHash },
+    });
     void this.ingestionService.process(upload.id, file.buffer, columns);
     return { uploadId: upload.id, status: UploadStatus.PENDING };
   }

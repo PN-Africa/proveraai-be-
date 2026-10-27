@@ -1,3 +1,4 @@
+import { AuditService } from '../../audit/audit.service.js';
 import { BadRequestException, ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import type { AuthUser } from '../../../common/decorators/current-user.decorator.js';
 import { Role } from '../../auth/enums/role.enum.js';
@@ -29,11 +30,13 @@ const setup = ({ flagged = true, exists = true, existing = null as Partial<Revie
       return true;
     }),
   };
+  const auditService = { record: vi.fn(async () => undefined) };
   const service = new ReviewService(
     transactionModelAction as unknown as TransactionModelAction,
     reviewModelAction as unknown as ReviewModelAction,
+    auditService as unknown as AuditService,
   );
-  return { service, reviewModelAction };
+  return { service, reviewModelAction, auditService };
 };
 
 describe('ReviewService', () => {
@@ -77,6 +80,19 @@ describe('ReviewService', () => {
         decision: ReviewDecision.CLEARED,
         notes: decision.notes,
       });
+    });
+
+    it('audits the decision, and nothing when refused', async () => {
+      const { service, auditService } = setup({ existing: { reviewerId: 'analyst-1', status: ReviewStatus.IN_REVIEW } });
+      await service.decide('tx-1', decision, ada);
+      expect(auditService.record).toHaveBeenCalledWith({
+        action: 'review.decided',
+        entityType: 'transaction',
+        entityId: 'tx-1',
+        metadata: { decision: ReviewDecision.CLEARED },
+      });
+      await service.decide('tx-1', decision, ada).catch(() => undefined);
+      expect(auditService.record).toHaveBeenCalledTimes(1);
     });
 
     it('lets only the claiming analyst decide (AR-17)', async () => {

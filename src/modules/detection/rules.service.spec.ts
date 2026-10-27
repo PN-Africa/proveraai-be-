@@ -1,3 +1,4 @@
+import { AuditService } from '../audit/audit.service.js';
 import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import { DataSource, EntityManager, QueryFailedError } from 'typeorm';
 import type { AuthUser } from '../../common/decorators/current-user.decorator.js';
@@ -39,12 +40,14 @@ const setup = ({ current = highAmount() as DetectionRuleModel | null, failWith =
     setActive: vi.fn(async () => undefined),
     create: vi.fn(async (data: Partial<DetectionRuleModel>) => ({ id: 'rule-v2', ...data }) as DetectionRuleModel),
   };
+  const auditService = { record: vi.fn(async () => undefined) };
   const service = new RulesService(
     dataSource as unknown as DataSource,
     detectionRuleModelAction as unknown as DetectionRuleModelAction,
     new RuleEvaluatorService(),
+    auditService as unknown as AuditService,
   );
-  return { service, manager, detectionRuleModelAction };
+  return { service, manager, detectionRuleModelAction, auditService };
 };
 
 describe('RulesService', () => {
@@ -70,6 +73,22 @@ describe('RulesService', () => {
         manager,
       );
       expect(saved).toMatchObject({ version: 2, allowedParams: ['threshold', 'currency'], savedBy: 'admin-1' });
+    });
+
+    it('audits the change with before and after values (AR-25)', async () => {
+      const { service, auditService } = setup();
+      await service.update('high-amount-ngn', { version: 1, weight: 40 }, admin);
+      expect(auditService.record).toHaveBeenCalledWith({
+        action: 'rule.updated',
+        entityType: 'rule',
+        entityId: 'high-amount-ngn',
+        metadata: expect.objectContaining({
+          fromVersion: 1,
+          toVersion: 2,
+          before: expect.objectContaining({ weight: 30 }),
+          after: expect.objectContaining({ weight: 40 }),
+        }) as unknown,
+      });
     });
 
     it('keeps a switched-off rule switched off', async () => {

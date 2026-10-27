@@ -1,3 +1,4 @@
+import { AuditService } from '../../audit/audit.service.js';
 import { UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createHash } from 'node:crypto';
@@ -52,6 +53,7 @@ const setup = () => {
   const service = new RefreshTokenService(
     store as unknown as RefreshTokenModelAction,
     config,
+    { record: vi.fn() } as unknown as AuditService,
   );
   return { store, service };
 };

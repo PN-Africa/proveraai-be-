@@ -1,4 +1,5 @@
 import { ForbiddenException, UnauthorizedException } from '@nestjs/common';
+import { AuditService } from '../../audit/audit.service.js';
 import { AccountStatus } from '../enums/account-status.enum.js';
 import { Role } from '../enums/role.enum.js';
 import { AuthModelAction } from '../model-actions/auth-model-action.js';
@@ -31,13 +32,15 @@ const setup = ({
     registerFailure: vi.fn(async () => false),
     reset: vi.fn(async () => undefined),
   };
+  const auditService = { record: vi.fn(async () => undefined) };
   const service = new CredentialsService(
     authModelAction as unknown as AuthModelAction,
     passwordService as unknown as PasswordService,
     loginLockoutService as unknown as LoginLockoutService,
+    auditService as unknown as AuditService,
   );
   const attempt = () => service.authenticate('analyst@example.com', 'password', '127.0.0.1');
-  return { attempt, authModelAction, passwordService, loginLockoutService };
+  return { attempt, authModelAction, passwordService, loginLockoutService, auditService };
 };
 
 // AR-04: every failure looks the same to the caller

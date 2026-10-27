@@ -1,5 +1,7 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import type { AuthUser } from '../../../common/decorators/current-user.decorator.js';
+import { AuditService } from '../../audit/audit.service.js';
+import { AuditAction } from '../../audit/enums/audit-action.enum.js';
 import { DateRangeQueryDto } from '../dtos/date-range-query.dto.js';
 import { ReviewStatus } from '../enums/review-status.enum.js';
 import { RiskIndicatorModelAction } from '../model-actions/risk-indicator-model-action.js';
@@ -46,6 +48,7 @@ export class CustomerHistoryExportService {
   constructor(
     private readonly transactionModelAction: TransactionModelAction,
     private readonly riskIndicatorModelAction: RiskIndicatorModelAction,
+    private readonly auditService: AuditService,
   ) {}
 
   async export(transactionId: string, range: DateRangeQueryDto, user: AuthUser): Promise<CsvExport> {
@@ -99,6 +102,12 @@ export class CustomerHistoryExportService {
     this.logger.log(
       `Customer history exported: transaction=${transactionId} rows=${rows.length} by=${user.id} role=${user.role}`,
     );
+    await this.auditService.record({
+      action: AuditAction.CUSTOMER_HISTORY_EXPORTED,
+      entityType: 'transaction',
+      entityId: transactionId,
+      metadata: { customerId, rows: rows.length, from: range.from ?? null, to: range.to ?? null },
+    });
     return {
       fileName: `customer-${customerId.replace(/[^A-Za-z0-9_-]/g, '_')}-transactions.csv`,
       content: Buffer.from([COLUMNS.join(','), ...rows].join('\r\n') + '\r\n', 'utf8'),

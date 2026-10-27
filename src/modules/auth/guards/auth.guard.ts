@@ -11,6 +11,8 @@ import type { Request } from 'express';
 import type { AuthUser } from '../../../common/decorators/current-user.decorator.js';
 import { IS_PUBLIC_KEY } from '../../../common/decorators/public.decorator.js';
 import { ROLES_KEY } from '../../../common/decorators/roles.decorator.js';
+import { AuditService } from '../../audit/audit.service.js';
+import { AuditAction } from '../../audit/enums/audit-action.enum.js';
 import { Role } from '../enums/role.enum.js';
 import { AuthCookieService } from '../services/auth-cookie.service.js';
 import { TokenRevocationService } from '../services/token-revocation.service.js';
@@ -30,6 +32,7 @@ export class AuthGuard implements CanActivate {
     private readonly tokenService: TokenService,
     private readonly tokenRevocationService: TokenRevocationService,
     private readonly authCookieService: AuthCookieService,
+    private readonly auditService: AuditService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -59,6 +62,10 @@ export class AuthGuard implements CanActivate {
       this.logger.warn(
         `Access denied: account=${user.id} role=${user.role} ${request.method} ${request.path}`,
       );
+      await this.auditService.record({
+        action: AuditAction.ACCESS_DENIED,
+        metadata: { method: request.method, path: request.path, requiredRoles: roles },
+      });
       throw new ForbiddenException();
     }
     return true;

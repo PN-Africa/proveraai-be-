@@ -6,6 +6,8 @@ import {
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
+import { AuditService } from '../../audit/audit.service.js';
+import { AuditAction } from '../../audit/enums/audit-action.enum.js';
 import { AccountStatus } from '../enums/account-status.enum.js';
 import { Role } from '../enums/role.enum.js';
 import { AuthModelAction } from '../model-actions/auth-model-action.js';
@@ -48,6 +50,7 @@ export class AccountService {
   constructor(
     private readonly authModelAction: AuthModelAction,
     private readonly passwordService: PasswordService,
+    private readonly auditService: AuditService,
   ) {}
 
   findActive(id: string): Promise<AccountModel | null> {
@@ -85,6 +88,13 @@ export class AccountService {
       passwordHash: await this.passwordService.hash(password),
     });
     this.logger.log(`Account signed up, pending approval: id=${account.id}`);
+    await this.auditService.record({
+      action: AuditAction.ACCOUNT_SIGNED_UP,
+      actorId: account.id,
+      actorRole: account.role,
+      entityType: 'account',
+      entityId: account.id,
+    });
     return this.toProfile(account);
   }
 
@@ -103,6 +113,12 @@ export class AccountService {
       throw new NotFoundException('No pending account with this id');
     }
     this.logger.log(`Account approved: id=${id} by=${adminId}`);
+    await this.auditService.record({
+      action: AuditAction.ACCOUNT_APPROVED,
+      actorId: adminId,
+      entityType: 'account',
+      entityId: id,
+    });
     // Just activated, so it is found unless it was deleted in between
     const account = await this.authModelAction.findActiveById(id);
     if (!account) throw new NotFoundException('No pending account with this id');

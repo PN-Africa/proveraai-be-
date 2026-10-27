@@ -1,3 +1,4 @@
+import { AuditService } from '../../audit/audit.service.js';
 import {
   BadRequestException,
   ConflictException,
@@ -25,6 +26,7 @@ const setup = ({ emailTaken = false, pendingExists = true } = {}) => {
   const service = new AccountService(
     authModelAction as unknown as AuthModelAction,
     passwordService as unknown as PasswordService,
+    { record: vi.fn() } as unknown as AuditService,
   );
   return { service, authModelAction };
 };

@@ -6,6 +6,8 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import type { AuthUser } from '../../../common/decorators/current-user.decorator.js';
+import { AuditService } from '../../audit/audit.service.js';
+import { AuditAction } from '../../audit/enums/audit-action.enum.js';
 import { ReviewDecisionDto } from '../dtos/review-decision.dto.js';
 import { ReviewStatus } from '../enums/review-status.enum.js';
 import { ReviewModelAction } from '../model-actions/review-model-action.js';
@@ -20,6 +22,7 @@ export class ReviewService {
   constructor(
     private readonly transactionModelAction: TransactionModelAction,
     private readonly reviewModelAction: ReviewModelAction,
+    private readonly auditService: AuditService,
   ) {}
 
   // Claiming again a review you already hold returns it unchanged
@@ -37,6 +40,11 @@ export class ReviewService {
     if (review.reviewerId !== analyst.id) {
       throw new ConflictException('Another analyst is already reviewing this transaction');
     }
+    await this.auditService.record({
+      action: AuditAction.REVIEW_CLAIMED,
+      entityType: 'transaction',
+      entityId: transactionId,
+    });
     return toReviewView(review);
   }
 
@@ -48,7 +56,15 @@ export class ReviewService {
       dto.notes,
     );
     const review = await this.reviewModelAction.findForTransaction(transactionId);
-    if (closed && review) return toReviewView(review);
+    if (closed && review) {
+      await this.auditService.record({
+        action: AuditAction.REVIEW_DECIDED,
+        entityType: 'transaction',
+        entityId: transactionId,
+        metadata: { decision: dto.decision },
+      });
+      return toReviewView(review);
+    }
 
     if (!review) {
       if (!(await this.transactionModelAction.findById(transactionId))) {

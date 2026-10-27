@@ -1,3 +1,4 @@
+import { AuditService } from '../../audit/audit.service.js';
 import {
   ExecutionContext,
   ForbiddenException,
@@ -61,6 +62,7 @@ const setup = ({
     tokenService as unknown as TokenService,
     tokenRevocationService as unknown as TokenRevocationService,
     new AuthCookieService({} as ConfigService),
+    { record: vi.fn() } as unknown as AuditService,
   );
   return { guard, context, request, tokenService };
 };

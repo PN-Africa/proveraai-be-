@@ -1,6 +1,8 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import type { AuthUser } from '../../common/decorators/current-user.decorator.js';
+import { AuditService } from '../audit/audit.service.js';
+import { AuditAction } from '../audit/enums/audit-action.enum.js';
 import { LoginDto, SignupDto } from './dtos/auth.dto.js';
 import {
   AccountProfile,
@@ -23,6 +25,7 @@ export class AuthService {
     private readonly refreshTokenService: RefreshTokenService,
     private readonly tokenRevocationService: TokenRevocationService,
     private readonly authCookieService: AuthCookieService,
+    private readonly auditService: AuditService,
   ) {}
 
   async login(dto: LoginDto, req: Request, res: Response): Promise<AccountProfile> {
@@ -35,6 +38,11 @@ export class AuthService {
     const refresh = await this.refreshTokenService.issue(account.id);
     this.authCookieService.setSessionCookies(res, access, refresh);
     await this.accountService.recordLogin(account.id);
+    await this.auditService.record({
+      action: AuditAction.LOGIN_SUCCEEDED,
+      actorId: account.id,
+      actorRole: account.role,
+    });
     return this.accountService.toProfile(account);
   }
 
@@ -61,15 +69,20 @@ export class AuthService {
 
   async logout(req: Request, res: Response): Promise<{ message: string }> {
     const accessToken = this.authCookieService.readAccessToken(req);
-    if (accessToken) {
-      const user = this.verifyOrNull(accessToken);
-      if (user) await this.tokenRevocationService.revokeToken(user.jti, user.exp);
-    }
+    const user = accessToken ? this.verifyOrNull(accessToken) : null;
+    if (user) await this.tokenRevocationService.revokeToken(user.jti, user.exp);
 
     const refreshToken = this.authCookieService.readRefreshToken(req);
-    if (refreshToken) await this.refreshTokenService.revoke(refreshToken);
+    const accountId = refreshToken ? await this.refreshTokenService.revoke(refreshToken) : null;
 
     this.authCookieService.clearSessionCookies(res);
+    if (user || accountId) {
+      await this.auditService.record({
+        action: AuditAction.LOGOUT,
+        actorId: user?.id ?? accountId,
+        actorRole: user?.role ?? null,
+      });
+    }
     return { message: 'Logged out' };
   }
 

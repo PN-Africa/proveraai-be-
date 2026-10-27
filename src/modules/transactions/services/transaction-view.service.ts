@@ -1,5 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import type { AuthUser } from '../../../common/decorators/current-user.decorator.js';
+import { AuditService } from '../../audit/audit.service.js';
+import { AuditAction } from '../../audit/enums/audit-action.enum.js';
 import { Role } from '../../auth/enums/role.enum.js';
 import { ListTransactionsQueryDto } from '../dtos/list-transactions-query.dto.js';
 import { ReviewStatus } from '../enums/review-status.enum.js';
@@ -53,6 +55,7 @@ export class TransactionViewService {
   constructor(
     private readonly transactionModelAction: TransactionModelAction,
     private readonly riskIndicatorModelAction: RiskIndicatorModelAction,
+    private readonly auditService: AuditService,
   ) {}
 
   async list(query: ListTransactionsQueryDto, user: AuthUser) {
@@ -78,6 +81,7 @@ export class TransactionViewService {
     const transaction = await this.transactionModelAction.findWithReview(id);
     if (!transaction) throw new NotFoundException('Transaction not found');
     const indicators = await this.riskIndicatorModelAction.findForTransaction(id);
+    await this.auditService.record({ action: AuditAction.TRANSACTION_VIEWED, entityType: 'transaction', entityId: id });
     return {
       ...toTransactionView(transaction),
       attributes: transaction.attributes,

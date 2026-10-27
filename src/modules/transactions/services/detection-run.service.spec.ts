@@ -1,3 +1,4 @@
+import { AuditService } from '../../audit/audit.service.js';
 import { ConflictException, NotFoundException } from '@nestjs/common';
 import type { Redis } from 'ioredis';
 import type { AuthUser } from '../../../common/decorators/current-user.decorator.js';
@@ -53,6 +54,7 @@ const setup = ({
     uploadScoringService as unknown as UploadScoringService,
     transactionModelAction as unknown as TransactionModelAction,
     uploadBatchModelAction as unknown as UploadBatchModelAction,
+    { record: vi.fn() } as unknown as AuditService,
   );
   return { service, redis, uploadScoringService, uploadBatchModelAction };
 };

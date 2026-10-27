@@ -1,5 +1,6 @@
 import { UnauthorizedException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
+import { AuditService } from '../audit/audit.service.js';
 import type { Request, Response } from 'express';
 import { AuthService } from './auth.service.js';
 import { Role } from './enums/role.enum.js';
@@ -59,6 +60,7 @@ describe('AuthService', () => {
         { provide: RefreshTokenService, useValue: refreshTokenService },
         { provide: TokenRevocationService, useValue: tokenRevocationService },
         { provide: AuthCookieService, useValue: authCookieService },
+        { provide: AuditService, useValue: { record: vi.fn() } },
       ],
     }).compile();
 

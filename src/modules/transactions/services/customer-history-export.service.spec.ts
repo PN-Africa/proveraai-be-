@@ -1,3 +1,4 @@
+import { AuditService } from '../../audit/audit.service.js';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import type { AuthUser } from '../../../common/decorators/current-user.decorator.js';
 import { Role } from '../../auth/enums/role.enum.js';
@@ -59,6 +60,7 @@ const setup = (target: TransactionModel | null = flagged, history = [tx({}), fla
   const service = new CustomerHistoryExportService(
     transactionModelAction as unknown as TransactionModelAction,
     riskIndicatorModelAction as unknown as RiskIndicatorModelAction,
+    { record: vi.fn() } as unknown as AuditService,
   );
   return { service, transactionModelAction };
 };

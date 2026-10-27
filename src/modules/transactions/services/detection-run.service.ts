@@ -3,6 +3,8 @@ import type { Redis } from 'ioredis';
 import { randomUUID } from 'node:crypto';
 import type { AuthUser } from '../../../common/decorators/current-user.decorator.js';
 import { REDIS_CLIENT } from '../../../common/redis/redis.constants.js';
+import { AuditService } from '../../audit/audit.service.js';
+import { AuditAction } from '../../audit/enums/audit-action.enum.js';
 import { UploadStatus } from '../enums/upload-status.enum.js';
 import { TransactionModelAction } from '../model-actions/transaction-model-action.js';
 import { UploadBatchModelAction } from '../model-actions/upload-batch-model-action.js';
@@ -36,6 +38,7 @@ export class DetectionRunService {
     private readonly uploadScoringService: UploadScoringService,
     private readonly transactionModelAction: TransactionModelAction,
     private readonly uploadBatchModelAction: UploadBatchModelAction,
+    private readonly auditService: AuditService,
   ) {}
 
   // Rescores every transaction of one upload that is not claimed or reviewed
@@ -53,6 +56,12 @@ export class DetectionRunService {
       const counts = await this.scoreUpload(upload, targets, stored);
       const result = { uploads: 1, ...counts, skippedReviewed: stored - targets.length };
       this.logger.log(`Upload ${uploadId} rescored by=${admin.id}: ${JSON.stringify(result)}`);
+      await this.auditService.record({
+        action: AuditAction.UPLOAD_RESCORED,
+        entityType: 'upload',
+        entityId: uploadId,
+        metadata: { ...result },
+      });
       return result;
     });
   }
@@ -73,6 +82,7 @@ export class DetectionRunService {
         result.flagged += counts.flagged;
       }
       this.logger.log(`Unscored transactions scored by=${admin.id}: ${JSON.stringify(result)}`);
+      await this.auditService.record({ action: AuditAction.UNSCORED_SCORED, metadata: { ...result } });
       return result;
     });
   }
