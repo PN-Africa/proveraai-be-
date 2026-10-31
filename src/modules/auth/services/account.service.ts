@@ -12,6 +12,7 @@ import { AccountStatus } from '../enums/account-status.enum.js';
 import { Role } from '../enums/role.enum.js';
 import { AuthModelAction } from '../model-actions/auth-model-action.js';
 import { AccountModel } from '../models/auth.model.js';
+import { Member, toMember } from './member.service.js';
 import {
   MAX_PASSWORD_LENGTH,
   MIN_PASSWORD_LENGTH,
@@ -32,9 +33,11 @@ export interface PendingAccount {
   createdAt: Date;
 }
 
+// account has the same shape as a row of GET /users, so the frontend can
+// move it from the pending list into the members table without a reload
 export interface ApprovedAccount {
   message: string;
-  account: AccountProfile;
+  account: Member;
 }
 
 export interface SignupInput {
@@ -122,7 +125,7 @@ export class AccountService {
     // Just activated, so it is found unless it was deleted in between
     const account = await this.authModelAction.findActiveById(id);
     if (!account) throw new NotFoundException('No pending account with this id');
-    return { message: 'Account approved', account: this.toProfile(account) };
+    return { message: 'Account approved', account: toMember(account) };
   }
 
   toProfile(account: AccountModel): AccountProfile {

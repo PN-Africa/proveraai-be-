@@ -59,6 +59,14 @@ export class CredentialsService {
       });
       throw new ForbiddenException('Account pending approval');
     }
+    if (account.status === AccountStatus.DEACTIVATED) {
+      await this.auditService.record({
+        action: AuditAction.LOGIN_DEACTIVATED,
+        actorId: account.id,
+        actorRole: account.role,
+      });
+      throw new ForbiddenException('Account deactivated. Contact an administrator');
+    }
     if (account.status !== AccountStatus.ACTIVE) {
       throw new UnauthorizedException('Invalid credentials');
     }

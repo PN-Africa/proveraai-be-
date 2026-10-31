@@ -79,6 +79,15 @@ describe('CredentialsService', () => {
     expect((error as ForbiddenException).message).toBe('Account pending approval');
   });
 
+  it('tells a deactivated account with the right password to contact an admin', async () => {
+    const { attempt } = setup({
+      found: { ...accountData, status: AccountStatus.DEACTIVATED } as AccountModel,
+    });
+    await expect(attempt()).rejects.toThrow(
+      new ForbiddenException('Account deactivated. Contact an administrator'),
+    );
+  });
+
   it('fails generically for a pending account with the wrong password', async () => {
     const { attempt } = setup({
       found: { ...accountData, status: AccountStatus.PENDING } as AccountModel,
