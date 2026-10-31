@@ -34,11 +34,11 @@ export class TransactionsService {
   // Checks the header (400) and that this exact file is new (409) right away,
   // then processes the rows in the background. The frontend polls
   // GET /uploads/:id for the result.
-  async upload(file: UploadedCsvFile | undefined, admin: AuthUser) {
+  async upload(file: UploadedCsvFile | undefined, user: AuthUser) {
     if (!file) throw new BadRequestException('Attach a CSV file in the "file" field');
     const columns = this.csvReaderService.readHeader(file.buffer);
     const fileHash = await this.uploadBatchService.assertNotUploadedBefore(file.buffer);
-    const upload = await this.uploadBatchService.create(file.originalname, fileHash, admin.id);
+    const upload = await this.uploadBatchService.create(file.originalname, fileHash, user.id);
     await this.auditService.record({
       action: AuditAction.UPLOAD_CREATED,
       entityType: 'upload',

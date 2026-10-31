@@ -30,6 +30,7 @@ import { TransactionsService } from './transactions.service.js';
 
 const CSV_MIME_TYPES = ['text/csv', 'application/csv', 'application/vnd.ms-excel', 'text/plain'];
 
+// Analysts can upload and follow their uploads; detection runs stay admin-only
 @ApiTags('uploads')
 @Roles(Role.ADMIN)
 @Controller('uploads')
@@ -38,6 +39,7 @@ export class UploadsController {
 
   // Kept in memory only (never written to disk), max 5 MB
   @Post()
+  @Roles(Role.ADMIN, Role.ANALYST)
   @HttpCode(HttpStatus.ACCEPTED)
   @Throttle({ default: { limit: 10, ttl: 60000 } })
   @UseInterceptors(
@@ -53,9 +55,9 @@ export class UploadsController {
   @UploadsDocs.Upload()
   upload(
     @UploadedFile() file: UploadedCsvFile | undefined,
-    @CurrentUser() admin: AuthUser,
+    @CurrentUser() user: AuthUser,
   ) {
-    return this.transactionsService.upload(file, admin);
+    return this.transactionsService.upload(file, user);
   }
 
   @Post('score-unscored')
@@ -75,18 +77,21 @@ export class UploadsController {
   }
 
   @Get()
+  @Roles(Role.ADMIN, Role.ANALYST)
   @UploadsDocs.List()
   list(@Query() query: PaginationQueryDto) {
     return this.transactionsService.listUploads(query);
   }
 
   @Get(':id')
+  @Roles(Role.ADMIN, Role.ANALYST)
   @UploadsDocs.Get()
   get(@Param('id', ParseUUIDPipe) id: string) {
     return this.transactionsService.getUpload(id);
   }
 
   @Get(':id/rejected')
+  @Roles(Role.ADMIN, Role.ANALYST)
   @UploadsDocs.Rejected()
   rejected(
     @Param('id', ParseUUIDPipe) id: string,

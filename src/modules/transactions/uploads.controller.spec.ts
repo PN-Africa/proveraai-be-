@@ -25,8 +25,16 @@ describe('UploadsController', () => {
 
   afterAll(() => app.close());
 
-  it('is restricted to administrators', () => {
-    expect(Reflect.getMetadata(ROLES_KEY, UploadsController)).toEqual([Role.ADMIN]);
+  it('lets analysts upload and follow uploads, but keeps detection runs admin-only', () => {
+    const rolesOf = (method: keyof UploadsController) =>
+      (Reflect.getMetadata(ROLES_KEY, Object.getOwnPropertyDescriptor(UploadsController.prototype, method)?.value as object) ??
+        Reflect.getMetadata(ROLES_KEY, UploadsController)) as Role[];
+
+    for (const method of ['upload', 'list', 'get', 'rejected'] as const) {
+      expect(rolesOf(method)).toEqual([Role.ADMIN, Role.ANALYST]);
+    }
+    expect(rolesOf('rescore')).toEqual([Role.ADMIN]);
+    expect(rolesOf('scoreUnscored')).toEqual([Role.ADMIN]);
   });
 
   it('accepts a .csv file with 202', async () => {
