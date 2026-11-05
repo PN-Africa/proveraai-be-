@@ -21,10 +21,10 @@ export class UploadBatchModelAction extends AbstractModel<UploadBatchModel> {
     super(uploadBatchRepository, UploadBatchModel);
   }
 
-  // The earliest upload of this content that did not fail
-  async findNotFailedByHash(fileHash: string): Promise<UploadBatchModel | null> {
+  // The owner's earliest upload of this content that did not fail
+  async findNotFailedByHash(fileHash: string, uploadedById: string): Promise<UploadBatchModel | null> {
     return this.uploadBatchRepository.findOne({
-      where: { fileHash, status: Not(UploadStatus.FAILED) },
+      where: { fileHash, uploadedById, status: Not(UploadStatus.FAILED) },
       order: { createdAt: 'ASC' },
     });
   }

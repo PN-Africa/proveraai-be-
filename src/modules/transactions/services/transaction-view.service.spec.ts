@@ -8,7 +8,7 @@ import { TransactionModelAction } from '../model-actions/transaction-model-actio
 import { TransactionModel } from '../models/transaction.model.js';
 import { TransactionViewService } from './transaction-view.service.js';
 
-const user = (role: Role) => ({ id: 'user-1', role }) as AuthUser;
+const owner = { id: 'user-1', role: Role.ANALYST } as AuthUser;
 
 const transaction = (overrides: Partial<TransactionModel> = {}) =>
   ({
@@ -42,37 +42,33 @@ const setup = (t: TransactionModel | null = transaction()) => {
 };
 
 describe('TransactionViewService', () => {
-  it('hides rule weights from analysts (TR-11)', async () => {
-    const [indicator] = (await setup().service.get('tx-1', user(Role.ANALYST))).indicators;
+  it('shows the owner each rule with its weight', async () => {
+    const { service, transactionModelAction } = setup();
+    const [indicator] = (await service.get('tx-1', owner)).indicators;
     expect(indicator).toEqual({
+      ruleKey: 'high-amount-ngn',
       ruleName: 'High-value transaction (NGN)',
+      weight: 30,
       reason: 'High-value transaction of NGN 950,000',
       details: {},
     });
-  });
-
-  it('shows rule weights to admins', async () => {
-    const [indicator] = (await setup().service.get('tx-1', user(Role.ADMIN))).indicators;
-    expect(indicator).toMatchObject({ ruleKey: 'high-amount-ngn', weight: 30 });
+    expect(transactionModelAction.findWithReview).toHaveBeenCalledWith('tx-1', 'user-1');
   });
 
   it('marks a flagged transaction with no review as OPEN, and others as not reviewable', async () => {
     const { service } = setup();
-    expect((await service.get('tx-1', user(Role.ANALYST))).reviewStatus).toBe(ReviewStatus.OPEN);
+    expect((await service.get('tx-1', owner)).reviewStatus).toBe(ReviewStatus.OPEN);
     const notFlagged = setup(transaction({ flagged: false })).service;
-    expect((await notFlagged.get('tx-1', user(Role.ANALYST))).reviewStatus).toBeNull();
+    expect((await notFlagged.get('tx-1', owner)).reviewStatus).toBeNull();
   });
 
-  it('turns query filters into model filters, scoping "mine" to the user', async () => {
+  it("lists only the user's own transactions, with the query filters", async () => {
     const { service, transactionModelAction } = setup();
-    await service.list(
-      { reviewStatus: ReviewStatus.IN_REVIEW, mine: true, from: '2026-10-01T00:00:00Z' },
-      user(Role.ANALYST),
-    );
+    await service.list({ reviewStatus: ReviewStatus.OPEN, from: '2026-10-01T00:00:00Z' }, owner);
     expect(transactionModelAction.findPage).toHaveBeenCalledWith(
+      'user-1',
       expect.objectContaining({
-        reviewStatus: ReviewStatus.IN_REVIEW,
-        reviewerId: 'user-1',
+        reviewStatus: ReviewStatus.OPEN,
         from: new Date('2026-10-01T00:00:00Z'),
       }),
       1,
@@ -80,7 +76,7 @@ describe('TransactionViewService', () => {
     );
   });
 
-  it('returns 404 for an unknown transaction', async () => {
-    await expect(setup(null).service.get('tx-1', user(Role.ANALYST))).rejects.toThrow('Transaction not found');
+  it("returns 404 for an unknown or another account's transaction", async () => {
+    await expect(setup(null).service.get('tx-1', owner)).rejects.toThrow('Transaction not found');
   });
 });

@@ -2,7 +2,6 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import type { AuthUser } from '../../../common/decorators/current-user.decorator.js';
 import { AuditService } from '../../audit/audit.service.js';
 import { AuditAction } from '../../audit/enums/audit-action.enum.js';
-import { Role } from '../../auth/enums/role.enum.js';
 import { ListTransactionsQueryDto } from '../dtos/list-transactions-query.dto.js';
 import { ReviewStatus } from '../enums/review-status.enum.js';
 import { RiskIndicatorModelAction } from '../model-actions/risk-indicator-model-action.js';
@@ -12,13 +11,16 @@ import { RiskIndicatorModel } from '../models/risk-indicator.model.js';
 import { TransactionModel } from '../models/transaction.model.js';
 
 export const toReviewView = (review: ReviewModel) => ({
-  status: review.status,
+  status: ReviewStatus.CLOSED,
   decision: review.decision,
   notes: review.notes,
   reviewer: { id: review.reviewerId, fullName: review.reviewer?.fullName ?? null },
-  claimedAt: review.claimedAt,
   decidedAt: review.decidedAt,
 });
+
+// null for transactions that are not flagged, which are never reviewed
+export const reviewStatusOf = (t: TransactionModel) =>
+  t.review ? ReviewStatus.CLOSED : t.flagged ? ReviewStatus.OPEN : null;
 
 const toTransactionView = (t: TransactionModel) => ({
   id: t.id,
@@ -34,22 +36,21 @@ const toTransactionView = (t: TransactionModel) => ({
   riskScore: t.riskScore,
   riskLevel: t.riskLevel,
   flagged: t.flagged,
-  // null for transactions that are not flagged, which are never reviewed
-  reviewStatus: t.review ? t.review.status : t.flagged ? ReviewStatus.OPEN : null,
+  reviewStatus: reviewStatusOf(t),
   review: t.review ? toReviewView(t.review) : null,
 });
 
-// Weights are tuning data, shown to admins only (TR-11). Reasons never
-// contain thresholds, so everyone sees them.
-const toIndicatorView = (indicator: RiskIndicatorModel, isAdmin: boolean) => ({
+// The owner edits the rules, so they see each rule's weight too
+const toIndicatorView = (indicator: RiskIndicatorModel) => ({
+  ruleKey: indicator.ruleKey,
   ruleName: indicator.ruleName,
+  weight: indicator.weight,
   reason: indicator.reason,
   details: indicator.details,
-  ...(isAdmin && { ruleKey: indicator.ruleKey, weight: indicator.weight }),
 });
 
-// Read side of transactions: lists with filters, and one transaction with
-// the reasons behind its risk level
+// Read side of the user's own transactions: lists with filters, and one
+// transaction with the reasons behind its risk level
 @Injectable()
 export class TransactionViewService {
   constructor(
@@ -60,11 +61,11 @@ export class TransactionViewService {
 
   async list(query: ListTransactionsQueryDto, user: AuthUser) {
     const result = await this.transactionModelAction.findPage(
+      user.id,
       {
         riskLevel: query.riskLevel,
         flagged: query.flagged,
         reviewStatus: query.reviewStatus,
-        reviewerId: query.mine ? user.id : undefined,
         uploadId: query.uploadId,
         customerId: query.customerId,
         type: query.type,
@@ -78,7 +79,7 @@ export class TransactionViewService {
   }
 
   async get(id: string, user: AuthUser) {
-    const transaction = await this.transactionModelAction.findWithReview(id);
+    const transaction = await this.transactionModelAction.findWithReview(id, user.id);
     if (!transaction) throw new NotFoundException('Transaction not found');
     const indicators = await this.riskIndicatorModelAction.findForTransaction(id);
     await this.auditService.record({ action: AuditAction.TRANSACTION_VIEWED, entityType: 'transaction', entityId: id });
@@ -86,7 +87,7 @@ export class TransactionViewService {
       ...toTransactionView(transaction),
       attributes: transaction.attributes,
       scoredAt: transaction.scoredAt,
-      indicators: indicators.map((i) => toIndicatorView(i, user.role === Role.ADMIN)),
+      indicators: indicators.map(toIndicatorView),
     };
   }
 }

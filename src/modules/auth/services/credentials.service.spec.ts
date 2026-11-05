@@ -70,27 +70,16 @@ describe('CredentialsService', () => {
     expect(loginLockoutService.registerFailure).toHaveBeenCalledWith('analyst@example.com');
   });
 
-  it('tells a pending account with the right password that it awaits approval', async () => {
-    const { attempt } = setup({
-      found: { ...accountData, status: AccountStatus.PENDING } as AccountModel,
-    });
-    const error = await attempt().catch((e: unknown) => e);
-    expect(error).toBeInstanceOf(ForbiddenException);
-    expect((error as ForbiddenException).message).toBe('Account pending approval');
-  });
-
-  it('tells a deactivated account with the right password to contact an admin', async () => {
+  it('tells a deactivated account with the right password that it is deactivated', async () => {
     const { attempt } = setup({
       found: { ...accountData, status: AccountStatus.DEACTIVATED } as AccountModel,
     });
-    await expect(attempt()).rejects.toThrow(
-      new ForbiddenException('Account deactivated. Contact an administrator'),
-    );
+    await expect(attempt()).rejects.toThrow(new ForbiddenException('Account deactivated'));
   });
 
-  it('fails generically for a pending account with the wrong password', async () => {
+  it('fails generically for a deactivated account with the wrong password', async () => {
     const { attempt } = setup({
-      found: { ...accountData, status: AccountStatus.PENDING } as AccountModel,
+      found: { ...accountData, status: AccountStatus.DEACTIVATED } as AccountModel,
       passwordOk: false,
     });
     await expectGenericFailure(attempt());

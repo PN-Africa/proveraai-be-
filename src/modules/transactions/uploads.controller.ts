@@ -18,8 +18,6 @@ import {
   CurrentUser,
   type AuthUser,
 } from '../../common/decorators/current-user.decorator.js';
-import { Roles } from '../../common/decorators/roles.decorator.js';
-import { Role } from '../auth/enums/role.enum.js';
 import { UploadsDocs } from './docs/uploads.docs.js';
 import { PaginationQueryDto } from './dtos/pagination-query.dto.js';
 import {
@@ -30,16 +28,14 @@ import { TransactionsService } from './transactions.service.js';
 
 const CSV_MIME_TYPES = ['text/csv', 'application/csv', 'application/vnd.ms-excel', 'text/plain'];
 
-// Analysts can upload and follow their uploads; detection runs stay admin-only
+// Each account uploads, follows and rescores only its own uploads
 @ApiTags('uploads')
-@Roles(Role.ADMIN)
 @Controller('uploads')
 export class UploadsController {
   constructor(private readonly transactionsService: TransactionsService) {}
 
   // Kept in memory only (never written to disk), max 5 MB
   @Post()
-  @Roles(Role.ADMIN, Role.ANALYST)
   @HttpCode(HttpStatus.ACCEPTED)
   @Throttle({ default: { limit: 10, ttl: 60000 } })
   @UseInterceptors(
@@ -64,39 +60,37 @@ export class UploadsController {
   @HttpCode(HttpStatus.OK)
   @Throttle({ default: { limit: 5, ttl: 60000 } })
   @UploadsDocs.ScoreUnscored()
-  scoreUnscored(@CurrentUser() admin: AuthUser) {
-    return this.transactionsService.scoreUnscored(admin);
+  scoreUnscored(@CurrentUser() user: AuthUser) {
+    return this.transactionsService.scoreUnscored(user);
   }
 
   @Post(':id/rescore')
   @HttpCode(HttpStatus.OK)
   @Throttle({ default: { limit: 5, ttl: 60000 } })
   @UploadsDocs.Rescore()
-  rescore(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() admin: AuthUser) {
-    return this.transactionsService.rescoreUpload(id, admin);
+  rescore(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: AuthUser) {
+    return this.transactionsService.rescoreUpload(id, user);
   }
 
   @Get()
-  @Roles(Role.ADMIN, Role.ANALYST)
   @UploadsDocs.List()
-  list(@Query() query: PaginationQueryDto) {
-    return this.transactionsService.listUploads(query);
+  list(@Query() query: PaginationQueryDto, @CurrentUser() user: AuthUser) {
+    return this.transactionsService.listUploads(query, user);
   }
 
   @Get(':id')
-  @Roles(Role.ADMIN, Role.ANALYST)
   @UploadsDocs.Get()
-  get(@Param('id', ParseUUIDPipe) id: string) {
-    return this.transactionsService.getUpload(id);
+  get(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: AuthUser) {
+    return this.transactionsService.getUpload(id, user);
   }
 
   @Get(':id/rejected')
-  @Roles(Role.ADMIN, Role.ANALYST)
   @UploadsDocs.Rejected()
   rejected(
     @Param('id', ParseUUIDPipe) id: string,
     @Query() query: PaginationQueryDto,
+    @CurrentUser() user: AuthUser,
   ) {
-    return this.transactionsService.listRejectedRows(id, query);
+    return this.transactionsService.listRejectedRows(id, query, user);
   }
 }

@@ -3,9 +3,9 @@ import type { AuthUser } from '../../../common/decorators/current-user.decorator
 import { AuditService } from '../../audit/audit.service.js';
 import { AuditAction } from '../../audit/enums/audit-action.enum.js';
 import { DateRangeQueryDto } from '../dtos/date-range-query.dto.js';
-import { ReviewStatus } from '../enums/review-status.enum.js';
 import { RiskIndicatorModelAction } from '../model-actions/risk-indicator-model-action.js';
 import { TransactionModelAction } from '../model-actions/transaction-model-action.js';
+import { reviewStatusOf } from './transaction-view.service.js';
 
 export const MAX_EXPORT_ROWS = 10_000;
 
@@ -38,9 +38,9 @@ export interface CsvExport {
   content: Buffer;
 }
 
-// A flagged transaction's customer, with every transaction of theirs and the
-// reasons behind each risk level, as a CSV file for offline investigation.
-// Rule weights are left out (TR-11).
+// A flagged transaction's customer, with every transaction of theirs in the
+// user's own data and the reasons behind each risk level, as a CSV file for
+// offline investigation.
 @Injectable()
 export class CustomerHistoryExportService {
   private readonly logger = new Logger(CustomerHistoryExportService.name);
@@ -52,7 +52,9 @@ export class CustomerHistoryExportService {
   ) {}
 
   async export(transactionId: string, range: DateRangeQueryDto, user: AuthUser): Promise<CsvExport> {
-    const flaggedTransaction = await this.transactionModelAction.findById(transactionId);
+    const flaggedTransaction = await this.transactionModelAction.findOne({
+      where: { id: transactionId, ownerId: user.id },
+    });
     if (!flaggedTransaction) throw new NotFoundException('Transaction not found');
     if (!flaggedTransaction.flagged) {
       throw new BadRequestException('Customer history is available for flagged transactions only');
@@ -61,6 +63,7 @@ export class CustomerHistoryExportService {
     if (!customerId) throw new BadRequestException('This transaction has no customer ID');
 
     const transactions = await this.transactionModelAction.findCustomerTransactions(
+      user.id,
       customerId,
       range.from ? new Date(range.from) : undefined,
       range.to ? new Date(range.to) : undefined,
@@ -91,7 +94,7 @@ export class CustomerHistoryExportService {
         t.riskScore,
         t.riskLevel,
         t.flagged,
-        t.review ? t.review.status : t.flagged ? ReviewStatus.OPEN : null,
+        reviewStatusOf(t),
         t.review?.decision,
         (reasons.get(t.id) ?? []).join('; '),
       ]
@@ -100,7 +103,7 @@ export class CustomerHistoryExportService {
     );
 
     this.logger.log(
-      `Customer history exported: transaction=${transactionId} rows=${rows.length} by=${user.id} role=${user.role}`,
+      `Customer history exported: transaction=${transactionId} rows=${rows.length} by=${user.id}`,
     );
     await this.auditService.record({
       action: AuditAction.CUSTOMER_HISTORY_EXPORTED,

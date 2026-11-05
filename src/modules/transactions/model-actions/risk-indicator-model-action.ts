@@ -41,15 +41,17 @@ export class RiskIndicatorModelAction extends AbstractModel<RiskIndicatorModel> 
     return indicators;
   }
 
-  // Which rules fired most for transactions in the range. A rule keeps its
-  // ruleKey across versions; the name shown is from its latest firing.
+  // Which rules fired most for the owner's transactions in the range. A rule
+  // keeps its ruleKey across versions; the name shown is from its latest firing.
   countByRule(
+    ownerId: string,
     range: OccurredRange,
     limit: number,
   ): Promise<{ ruleKey: string; ruleName: string; hits: string }[]> {
     const query = this.riskIndicatorRepository
       .createQueryBuilder('ri')
       .innerJoin('ri.transaction', 't')
+      .where('t.ownerId = :ownerId', { ownerId })
       .select('ri.ruleKey', 'ruleKey')
       .addSelect('(array_agg(ri.ruleName ORDER BY ri.createdAt DESC))[1]', 'ruleName')
       .addSelect('count(*)', 'hits');

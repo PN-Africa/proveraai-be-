@@ -33,7 +33,8 @@ const assertOrdered = ({ from, to }: OccurredRange) => {
   if (from && to && from > to) throw new BadRequestException('from must be before to');
 };
 
-// Aggregates for the dashboard. Ranges are on when transactions occurred.
+// Aggregates of one owner's data for their dashboard. Ranges are on when
+// transactions occurred.
 @Injectable()
 export class TransactionStatsService {
   constructor(
@@ -41,11 +42,11 @@ export class TransactionStatsService {
     private readonly riskIndicatorModelAction: RiskIndicatorModelAction,
   ) {}
 
-  async summary(range: OccurredRange) {
+  async summary(ownerId: string, range: OccurredRange) {
     assertOrdered(range);
     const [totals, rules] = await Promise.all([
-      this.transactionModelAction.summarize(range),
-      this.riskIndicatorModelAction.countByRule(range, TOP_INDICATORS),
+      this.transactionModelAction.summarize(ownerId, range),
+      this.riskIndicatorModelAction.countByRule(ownerId, range, TOP_INDICATORS),
     ]);
     const scored = count(totals?.scored);
     const flagged = count(totals?.flagged);
@@ -65,12 +66,10 @@ export class TransactionStatsService {
       },
       reviews: {
         open: count(totals?.open),
-        inReview: count(totals?.inReview),
         closed: count(totals?.closed),
         cleared: count(totals?.cleared),
         escalated: count(totals?.escalated),
       },
-      // Names and counts only, no weights or thresholds (TR-11)
       topIndicators: rules.map((r) => ({
         ruleName: r.ruleName,
         count: count(r.hits),
@@ -81,7 +80,7 @@ export class TransactionStatsService {
 
   // One entry per day or week in the range, including empty ones, so the
   // chart has no gaps. Defaults to the last 30 days or 12 weeks.
-  async trend(range: OccurredRange, interval: TrendInterval) {
+  async trend(ownerId: string, range: OccurredRange, interval: TrendInterval) {
     const to = range.to ?? new Date();
     const step = interval === 'day' ? 1 : 7;
     const firstPeriod = periodOf(to, interval).getTime() - (DEFAULT_PERIODS[interval] - 1) * step * DAY_MS;
@@ -99,7 +98,7 @@ export class TransactionStatsService {
       periods.push(day.toISOString().slice(0, 10));
     }
 
-    const rows = await this.transactionModelAction.countByPeriod(interval, TIME_ZONE, { from, to });
+    const rows = await this.transactionModelAction.countByPeriod(ownerId, interval, TIME_ZONE, { from, to });
     const byPeriod = new Map(rows.map((r) => [r.period, r]));
     return {
       from,

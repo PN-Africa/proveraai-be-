@@ -7,7 +7,6 @@ import { Role } from './enums/role.enum.js';
 import { AccountService } from './services/account.service.js';
 import { AuthCookieService } from './services/auth-cookie.service.js';
 import { CredentialsService } from './services/credentials.service.js';
-import { MemberService } from './services/member.service.js';
 import { RefreshTokenService } from './services/refresh-token.service.js';
 import { TokenRevocationService } from './services/token-revocation.service.js';
 import { TokenService } from './services/token.service.js';
@@ -62,7 +61,6 @@ describe('AuthService', () => {
         { provide: TokenRevocationService, useValue: tokenRevocationService },
         { provide: AuthCookieService, useValue: authCookieService },
         { provide: AuditService, useValue: { record: vi.fn() } },
-        { provide: MemberService, useValue: {} },
       ],
     }).compile();
 

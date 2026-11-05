@@ -2,11 +2,16 @@ import { Column, Entity, Index } from 'typeorm';
 import { BaseEntity } from '../../../database/base.model.js';
 import { RuleType } from '../enums/rule-type.enum.js';
 
-// One rule of a built-in type with its own parameters and weight.
-// Editing a rule adds a new version under the same ruleKey.
+// One rule of a built-in type with its own parameters and weight, owned by
+// one account. Editing a rule adds a new version under the same ruleKey.
 @Entity('detection_rules')
-@Index(['ruleKey', 'version'], { unique: true })
+@Index(['ownerId', 'ruleKey', 'version'], { unique: true })
 export class DetectionRuleModel extends BaseEntity {
+  // The account whose transactions this rule scores
+  @Index()
+  @Column({ type: 'uuid' })
+  ownerId!: string;
+
   @Column({ length: 64 })
   ruleKey!: string;
 
@@ -29,8 +34,4 @@ export class DetectionRuleModel extends BaseEntity {
   // Only the latest version of a rule can be active
   @Column({ default: true })
   isActive!: boolean;
-
-  // The admin who saved this version. Null for seeded rules.
-  @Column({ type: 'uuid', nullable: true })
-  createdById!: string | null;
 }

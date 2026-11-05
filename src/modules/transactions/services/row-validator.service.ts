@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import type { NewTransaction } from '../model-actions/transaction-model-action.js';
 import { OPTIONAL_COLUMNS, REQUIRED_COLUMNS } from './csv-reader.service.js';
 
-export type ValidatedRow = Omit<NewTransaction, 'uploadId'>;
+export type ValidatedRow = Omit<NewTransaction, 'uploadId' | 'ownerId'>;
 
 export type RowValidation =
   | { valid: true; row: ValidatedRow }

@@ -2,8 +2,6 @@ import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import type { App } from 'supertest/types.js';
-import { ROLES_KEY } from '../../common/decorators/roles.decorator.js';
-import { Role } from '../auth/enums/role.enum.js';
 import { TransactionsController } from './transactions.controller.js';
 import { TransactionsService } from './transactions.service.js';
 
@@ -32,15 +30,8 @@ describe('TransactionsController', () => {
 
   afterAll(() => app.close());
 
-  it('lets only analysts claim and decide reviews', () => {
-    expect(Reflect.getMetadata(ROLES_KEY, TransactionsController)).toBeUndefined();
-    const rolesOf = (method: 'claim' | 'decide') =>
-      Reflect.getMetadata(
-        ROLES_KEY,
-        Object.getOwnPropertyDescriptor(TransactionsController.prototype, method)?.value as object,
-      ) as unknown;
-    expect(rolesOf('claim')).toEqual([Role.ANALYST]);
-    expect(rolesOf('decide')).toEqual([Role.ANALYST]);
+  it('has no claim step', async () => {
+    await request(app.getHttpServer()).post(`/transactions/${ID}/review/claim`).expect(404);
   });
 
   it('parses list filters', async () => {
@@ -56,6 +47,7 @@ describe('TransactionsController', () => {
   it('rejects unknown filters', async () => {
     await request(app.getHttpServer()).get('/transactions?riskLevel=EXTREME').expect(400);
     await request(app.getHttpServer()).get('/transactions?riskScore=99').expect(400);
+    await request(app.getHttpServer()).get('/transactions?reviewStatus=IN_REVIEW').expect(400);
   });
 
   it('requires a decision with real notes', async () => {

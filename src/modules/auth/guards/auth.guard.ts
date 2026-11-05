@@ -1,19 +1,13 @@
 import {
   CanActivate,
   ExecutionContext,
-  ForbiddenException,
   Injectable,
-  Logger,
   UnauthorizedException,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import type { Request } from 'express';
 import type { AuthUser } from '../../../common/decorators/current-user.decorator.js';
 import { IS_PUBLIC_KEY } from '../../../common/decorators/public.decorator.js';
-import { ROLES_KEY } from '../../../common/decorators/roles.decorator.js';
-import { AuditService } from '../../audit/audit.service.js';
-import { AuditAction } from '../../audit/enums/audit-action.enum.js';
-import { Role } from '../enums/role.enum.js';
 import { AuthCookieService } from '../services/auth-cookie.service.js';
 import { TokenRevocationService } from '../services/token-revocation.service.js';
 import { TokenService } from '../services/token.service.js';
@@ -22,17 +16,15 @@ import { TokenService } from '../services/token.service.js';
 // where access is decided (AR-01, AR-16):
 // 1. @Public() routes pass.
 // 2. Otherwise the access_token cookie must hold a valid, unrevoked token.
-// 3. If the route or controller has @Roles(...), the user's role must match.
+// Each account only ever reaches its own data; services scope every query
+// to the signed-in user.
 @Injectable()
 export class AuthGuard implements CanActivate {
-  private readonly logger = new Logger(AuthGuard.name);
-
   constructor(
     private readonly reflector: Reflector,
     private readonly tokenService: TokenService,
     private readonly tokenRevocationService: TokenRevocationService,
     private readonly authCookieService: AuthCookieService,
-    private readonly auditService: AuditService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -53,21 +45,6 @@ export class AuthGuard implements CanActivate {
     }
     // Attach the user so controllers can read it with @CurrentUser()
     request.user = user;
-
-    const roles = this.reflector.getAllAndOverride<Role[] | undefined>(
-      ROLES_KEY,
-      targets,
-    );
-    if (roles?.length && !roles.includes(user.role)) {
-      this.logger.warn(
-        `Access denied: account=${user.id} role=${user.role} ${request.method} ${request.path}`,
-      );
-      await this.auditService.record({
-        action: AuditAction.ACCESS_DENIED,
-        metadata: { method: request.method, path: request.path, requiredRoles: roles },
-      });
-      throw new ForbiddenException();
-    }
     return true;
   }
 }

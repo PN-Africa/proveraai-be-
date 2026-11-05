@@ -3,7 +3,6 @@ import {
   ConflictException,
   Injectable,
   Logger,
-  NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { AuditService } from '../../audit/audit.service.js';
@@ -12,7 +11,6 @@ import { AccountStatus } from '../enums/account-status.enum.js';
 import { Role } from '../enums/role.enum.js';
 import { AuthModelAction } from '../model-actions/auth-model-action.js';
 import { AccountModel } from '../models/auth.model.js';
-import { Member, toMember } from './member.service.js';
 import {
   MAX_PASSWORD_LENGTH,
   MIN_PASSWORD_LENGTH,
@@ -24,20 +22,6 @@ export interface AccountProfile {
   fullName: string;
   email: string;
   role: Role;
-}
-
-export interface PendingAccount {
-  id: string;
-  fullName: string;
-  email: string;
-  createdAt: Date;
-}
-
-// account has the same shape as a row of GET /users, so the frontend can
-// move it from the pending list into the members table without a reload
-export interface ApprovedAccount {
-  message: string;
-  account: Member;
 }
 
 export interface SignupInput {
@@ -60,7 +44,7 @@ export class AccountService {
     return this.authModelAction.findActiveById(id);
   }
 
-  // A pending or deleted account is treated as signed out
+  // A deactivated or deleted account is treated as signed out
   async getActiveProfile(id: string): Promise<AccountProfile> {
     const account = await this.authModelAction.findActiveById(id);
     if (!account) throw new UnauthorizedException();
@@ -87,10 +71,11 @@ export class AccountService {
       fullName: fullName.trim(),
       email: normalizedEmail,
       role: Role.ANALYST,
-      status: AccountStatus.PENDING,
+      // No approval step: every account works on its own data only
+      status: AccountStatus.ACTIVE,
       passwordHash: await this.passwordService.hash(password),
     });
-    this.logger.log(`Account signed up, pending approval: id=${account.id}`);
+    this.logger.log(`Account signed up: id=${account.id}`);
     await this.auditService.record({
       action: AuditAction.ACCOUNT_SIGNED_UP,
       actorId: account.id,
@@ -99,33 +84,6 @@ export class AccountService {
       entityId: account.id,
     });
     return this.toProfile(account);
-  }
-
-  async listPending(): Promise<PendingAccount[]> {
-    const accounts = await this.authModelAction.findPending();
-    return accounts.map(({ id, fullName, email, createdAt }) => ({
-      id,
-      fullName,
-      email,
-      createdAt,
-    }));
-  }
-
-  async approve(id: string, adminId: string): Promise<ApprovedAccount> {
-    if (!(await this.authModelAction.activatePending(id))) {
-      throw new NotFoundException('No pending account with this id');
-    }
-    this.logger.log(`Account approved: id=${id} by=${adminId}`);
-    await this.auditService.record({
-      action: AuditAction.ACCOUNT_APPROVED,
-      actorId: adminId,
-      entityType: 'account',
-      entityId: id,
-    });
-    // Just activated, so it is found unless it was deleted in between
-    const account = await this.authModelAction.findActiveById(id);
-    if (!account) throw new NotFoundException('No pending account with this id');
-    return { message: 'Account approved', account: toMember(account) };
   }
 
   toProfile(account: AccountModel): AccountProfile {

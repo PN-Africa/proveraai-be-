@@ -42,7 +42,7 @@ describe('TokenService', () => {
   it('rejects a token with a tampered payload', () => {
     const [header, , signature] = service.signAccessToken(account).token.split('.');
     const forged = Buffer.from(
-      JSON.stringify({ sub: 'account-1', role: Role.ADMIN, jti: 'x', iss: JWT_ISSUER }),
+      JSON.stringify({ sub: 'account-2', role: Role.ANALYST, jti: 'x', iss: JWT_ISSUER }),
     ).toString('base64url');
     expect(() => service.verifyAccessToken(`${header}.${forged}.${signature}`)).toThrow(
       UnauthorizedException,
@@ -52,7 +52,7 @@ describe('TokenService', () => {
   it('rejects a token signed with another secret', () => {
     const token = signer('another-secret-that-is-at-least-32-chars').sign({
       sub: 'account-1',
-      role: Role.ADMIN,
+      role: Role.ANALYST,
       jti: 'x',
     });
     expect(() => service.verifyAccessToken(token)).toThrow(UnauthorizedException);
@@ -62,7 +62,7 @@ describe('TokenService', () => {
     const encode = (value: object) => Buffer.from(JSON.stringify(value)).toString('base64url');
     const token = `${encode({ alg: 'none', typ: 'JWT' })}.${encode({
       sub: 'account-1',
-      role: Role.ADMIN,
+      role: Role.ANALYST,
       jti: 'x',
       iss: JWT_ISSUER,
       exp: nowSeconds() + 60,
@@ -71,7 +71,7 @@ describe('TokenService', () => {
   });
 
   it('rejects a token from another issuer', () => {
-    const token = signer(SECRET, 'someone-else').sign({ sub: 'a', role: Role.ADMIN, jti: 'x' });
+    const token = signer(SECRET, 'someone-else').sign({ sub: 'a', role: Role.ANALYST, jti: 'x' });
     expect(() => service.verifyAccessToken(token)).toThrow(UnauthorizedException);
   });
 

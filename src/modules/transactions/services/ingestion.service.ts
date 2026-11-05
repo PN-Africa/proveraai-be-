@@ -38,12 +38,12 @@ export class IngestionService {
     private readonly uploadScoringService: UploadScoringService,
   ) {}
 
-  async process(uploadId: string, file: Buffer, columns: string[]): Promise<void> {
+  async process(uploadId: string, ownerId: string, file: Buffer, columns: string[]): Promise<void> {
     // Set once the rows are stored, so a scoring failure keeps the counts
     let counts: UploadCounts | undefined;
     try {
       await this.uploadBatchModelAction.markProcessing(uploadId);
-      counts = await this.ingest(uploadId, file, columns);
+      counts = await this.ingest(uploadId, ownerId, file, columns);
       counts.flaggedRows = await this.uploadScoringService.scoreUpload(uploadId);
       await this.uploadBatchModelAction.markCompleted(uploadId, counts);
       this.logger.log(
@@ -69,7 +69,12 @@ export class IngestionService {
     }
   }
 
-  private async ingest(uploadId: string, file: Buffer, columns: string[]): Promise<UploadCounts> {
+  private async ingest(
+    uploadId: string,
+    ownerId: string,
+    file: Buffer,
+    columns: string[],
+  ): Promise<UploadCounts> {
     const counts: UploadCounts = { totalRows: 0, acceptedRows: 0, rejectedRows: 0, flaggedRows: 0 };
     const seenInFile = new Set<string>();
     let pending: PendingRow[] = [];
@@ -87,7 +92,7 @@ export class IngestionService {
     const flushTransactions = async () => {
       const inserted = new Set(
         await this.transactionModelAction.insertNew(
-          pending.map(({ row }) => ({ ...row, uploadId })),
+          pending.map(({ row }) => ({ ...row, uploadId, ownerId })),
         ),
       );
       for (const { rowNumber, row } of pending) {

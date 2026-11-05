@@ -12,9 +12,9 @@ import { TransactionModel } from '../models/transaction.model.js';
 import { UploadBatchModel } from '../models/upload-batch.model.js';
 import { UploadScoringService } from './upload-scoring.service.js';
 
-// One manual run at a time, so two runs never write the same transactions.
-// The lock expires on its own if the process dies mid-run.
-const LOCK_KEY = 'detection:manual-run';
+// One manual run at a time per account, so two runs never write the same
+// transactions. The lock expires on its own if the process dies mid-run.
+const lockKey = (ownerId: string) => `detection:manual-run:${ownerId}`;
 const LOCK_SECONDS = 15 * 60;
 const RELEASE_IF_OWNER =
   "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end";
@@ -27,8 +27,8 @@ export interface RunResult {
   skippedReviewed: number;
 }
 
-// Admin-triggered detection with the current active rules. Rule changes never
-// rescore anything on their own (R-02); an admin decides when.
+// Owner-triggered detection with their current active rules. Rule changes
+// never rescore anything on their own (R-02); the owner decides when.
 @Injectable()
 export class DetectionRunService {
   private readonly logger = new Logger(DetectionRunService.name);
@@ -41,10 +41,12 @@ export class DetectionRunService {
     private readonly auditService: AuditService,
   ) {}
 
-  // Rescores every transaction of one upload that is not claimed or reviewed
-  rescoreUpload(uploadId: string, admin: AuthUser): Promise<RunResult> {
-    return this.withLock(async () => {
-      const upload = await this.uploadBatchModelAction.findById(uploadId);
+  // Rescores every transaction of one of the user's uploads that is not reviewed
+  rescoreUpload(uploadId: string, user: AuthUser): Promise<RunResult> {
+    return this.withLock(user.id, async () => {
+      const upload = await this.uploadBatchModelAction.findOne({
+        where: { id: uploadId, uploadedById: user.id },
+      });
       if (!upload) throw new NotFoundException('Upload not found');
       if (upload.status === UploadStatus.PENDING || upload.status === UploadStatus.PROCESSING) {
         throw new ConflictException('This upload is still being processed');
@@ -55,7 +57,7 @@ export class DetectionRunService {
       const targets = await this.transactionModelAction.findUnreviewedForUpload(uploadId);
       const counts = await this.scoreUpload(upload, targets, stored);
       const result = { uploads: 1, ...counts, skippedReviewed: stored - targets.length };
-      this.logger.log(`Upload ${uploadId} rescored by=${admin.id}: ${JSON.stringify(result)}`);
+      this.logger.log(`Upload ${uploadId} rescored by=${user.id}: ${JSON.stringify(result)}`);
       await this.auditService.record({
         action: AuditAction.UPLOAD_RESCORED,
         entityType: 'upload',
@@ -68,10 +70,10 @@ export class DetectionRunService {
 
   // Scores transactions that have no score yet: data stored before detection
   // existed, or uploads where scoring failed. Upload by upload, to bound memory.
-  scoreUnscored(admin: AuthUser): Promise<RunResult> {
-    return this.withLock(async () => {
+  scoreUnscored(user: AuthUser): Promise<RunResult> {
+    return this.withLock(user.id, async () => {
       const result: RunResult = { uploads: 0, scored: 0, flagged: 0, skippedReviewed: 0 };
-      for (const uploadId of await this.transactionModelAction.findUploadIdsWithUnscored()) {
+      for (const uploadId of await this.transactionModelAction.findUploadIdsWithUnscored(user.id)) {
         const upload = await this.uploadBatchModelAction.findById(uploadId);
         if (!upload) continue;
         const targets = await this.transactionModelAction.findUnscoredForUpload(uploadId);
@@ -81,7 +83,7 @@ export class DetectionRunService {
         result.scored += counts.scored;
         result.flagged += counts.flagged;
       }
-      this.logger.log(`Unscored transactions scored by=${admin.id}: ${JSON.stringify(result)}`);
+      this.logger.log(`Unscored transactions scored by=${user.id}: ${JSON.stringify(result)}`);
       await this.auditService.record({ action: AuditAction.UNSCORED_SCORED, metadata: { ...result } });
       return result;
     });
@@ -101,15 +103,16 @@ export class DetectionRunService {
     return counts;
   }
 
-  private async withLock<T>(run: () => Promise<T>): Promise<T> {
+  private async withLock<T>(ownerId: string, run: () => Promise<T>): Promise<T> {
+    const key = lockKey(ownerId);
     const token = randomUUID();
-    if ((await this.redis.set(LOCK_KEY, token, 'EX', LOCK_SECONDS, 'NX')) !== 'OK') {
+    if ((await this.redis.set(key, token, 'EX', LOCK_SECONDS, 'NX')) !== 'OK') {
       throw new ConflictException('A detection run is already in progress. Try again shortly');
     }
     try {
       return await run();
     } finally {
-      await this.redis.eval(RELEASE_IF_OWNER, 1, LOCK_KEY, token);
+      await this.redis.eval(RELEASE_IF_OWNER, 1, key, token);
     }
   }
 }

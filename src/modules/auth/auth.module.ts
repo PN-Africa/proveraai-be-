@@ -14,7 +14,6 @@ import { AccountService } from './services/account.service.js';
 import { AuthCookieService } from './services/auth-cookie.service.js';
 import { CredentialsService } from './services/credentials.service.js';
 import { LoginLockoutService } from './services/login-lockout.service.js';
-import { MemberService } from './services/member.service.js';
 import { PasswordService } from './services/password.service.js';
 import { RefreshTokenService } from './services/refresh-token.service.js';
 import { TokenRevocationService } from './services/token-revocation.service.js';
@@ -39,7 +38,6 @@ import { JWT_ISSUER, TokenService } from './services/token.service.js';
   providers: [
     AuthService,
     AccountService,
-    MemberService,
     CredentialsService,
     PasswordService,
     TokenService,

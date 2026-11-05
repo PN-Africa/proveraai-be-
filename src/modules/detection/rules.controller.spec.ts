@@ -2,8 +2,6 @@ import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import type { App } from 'supertest/types.js';
-import { ROLES_KEY } from '../../common/decorators/roles.decorator.js';
-import { Role } from '../auth/enums/role.enum.js';
 import { RulesController } from './rules.controller.js';
 import { RulesService } from './rules.service.js';
 
@@ -22,10 +20,6 @@ describe('RulesController', () => {
   });
 
   afterAll(() => app.close());
-
-  it('is restricted to administrators (AR-18)', () => {
-    expect(Reflect.getMetadata(ROLES_KEY, RulesController)).toEqual([Role.ADMIN]);
-  });
 
   it('accepts a valid edit', async () => {
     await request(app.getHttpServer())

@@ -1,10 +1,8 @@
-import { Logger } from '@nestjs/common';
-import { RuleType } from '../modules/detection/enums/rule-type.enum.js';
-import { DetectionRuleModel } from '../modules/detection/models/detection-rule.model.js';
-import { dataSource } from './data-source.js';
+import { RuleType } from './enums/rule-type.enum.js';
+import { DetectionRuleModel } from './models/detection-rule.model.js';
 
-// Starting thresholds and weights for the MVP, to be reviewed by the data
-// analyst. Seeded only while the rules table is empty.
+// Starting thresholds and weights, copied to each account the first time it
+// needs rules. Each account then edits its own copy.
 export const DEFAULT_RULES: Pick<DetectionRuleModel, 'ruleKey' | 'name' | 'type' | 'params' | 'weight'>[] = [
   {
     ruleKey: 'high-amount-ngn',
@@ -56,13 +54,3 @@ export const DEFAULT_RULES: Pick<DetectionRuleModel, 'ruleKey' | 'name' | 'type'
     weight: 15,
   },
 ];
-
-export const seedDetectionRules = async () => {
-  const logger = new Logger('SeedDetectionRules');
-  const ruleRepo = dataSource.getRepository(DetectionRuleModel);
-
-  if (await ruleRepo.exists()) return;
-
-  await ruleRepo.save(ruleRepo.create(DEFAULT_RULES));
-  logger.log(`Seeded ${DEFAULT_RULES.length} detection rules`);
-};

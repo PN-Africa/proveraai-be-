@@ -25,7 +25,6 @@ export interface TransactionFilters {
   riskLevel?: RiskLevel;
   flagged?: boolean;
   reviewStatus?: ReviewStatus;
-  reviewerId?: string;
   uploadId?: string;
   customerId?: string;
   type?: string;
@@ -63,9 +62,9 @@ export class TransactionModelAction extends AbstractModel<TransactionModel> {
     super(transactionRepository, TransactionModel);
   }
 
-  // Inserts the rows whose transactionId is not stored yet and returns the
-  // transactionIds that were inserted. Existing ones are skipped in the same
-  // statement, so two uploads at once cannot both store a transaction.
+  // Inserts the rows whose transactionId the owner has not stored yet and
+  // returns the transactionIds that were inserted. Existing ones are skipped
+  // in the same statement, so two uploads at once cannot both store one.
   async insertNew(rows: NewTransaction[]): Promise<string[]> {
     if (rows.length === 0) return [];
     const result = await this.transactionRepository
@@ -79,14 +78,15 @@ export class TransactionModelAction extends AbstractModel<TransactionModel> {
     return (result.raw as { transactionId: string }[]).map((r) => r.transactionId);
   }
 
-  // Highest risk first, then most recent. The review comes with its
-  // reviewer's id and name only.
-  async findPage(filters: TransactionFilters, page: number, limit: number) {
+  // The owner's transactions, highest risk first, then most recent. The
+  // review comes with its reviewer's id and name only.
+  async findPage(ownerId: string, filters: TransactionFilters, page: number, limit: number) {
     const query = this.transactionRepository
       .createQueryBuilder('t')
       .leftJoinAndSelect('t.review', 'r')
       .leftJoin('r.reviewer', 'reviewer')
-      .addSelect(['reviewer.id', 'reviewer.fullName']);
+      .addSelect(['reviewer.id', 'reviewer.fullName'])
+      .where('t.ownerId = :ownerId', { ownerId });
 
     if (filters.riskLevel) query.andWhere('t.riskLevel = :riskLevel', { riskLevel: filters.riskLevel });
     if (filters.flagged !== undefined) query.andWhere('t.flagged = :flagged', { flagged: filters.flagged });
@@ -94,12 +94,8 @@ export class TransactionModelAction extends AbstractModel<TransactionModel> {
     if (filters.customerId) query.andWhere('t.customerId = :customerId', { customerId: filters.customerId });
     if (filters.type) query.andWhere('t.type = :type', { type: filters.type });
     inRange(query, filters);
-    if (filters.reviewStatus === ReviewStatus.OPEN) {
-      query.andWhere('t.flagged = true AND r.id IS NULL');
-    } else if (filters.reviewStatus) {
-      query.andWhere('r.status = :reviewStatus', { reviewStatus: filters.reviewStatus });
-    }
-    if (filters.reviewerId) query.andWhere('r.reviewerId = :reviewerId', { reviewerId: filters.reviewerId });
+    if (filters.reviewStatus === ReviewStatus.OPEN) query.andWhere('t.flagged = true AND r.id IS NULL');
+    if (filters.reviewStatus === ReviewStatus.CLOSED) query.andWhere('r.id IS NOT NULL');
 
     const [data, total] = await query
       .orderBy('t.riskScore', 'DESC', 'NULLS LAST')
@@ -121,21 +117,22 @@ export class TransactionModelAction extends AbstractModel<TransactionModel> {
     };
   }
 
-  findWithReview(id: string): Promise<TransactionModel | null> {
+  findWithReview(id: string, ownerId: string): Promise<TransactionModel | null> {
     return this.transactionRepository
       .createQueryBuilder('t')
       .leftJoinAndSelect('t.review', 'r')
       .leftJoin('r.reviewer', 'reviewer')
       .addSelect(['reviewer.id', 'reviewer.fullName'])
-      .where('t.id = :id', { id })
+      .where('t.id = :id AND t.ownerId = :ownerId', { id, ownerId })
       .getOne();
   }
 
-  // Counts for the dashboard, in one pass. Postgres returns counts as strings.
-  summarize(range: OccurredRange): Promise<Record<string, string> | undefined> {
+  // Counts for the owner's dashboard, in one pass. Postgres returns counts as strings.
+  summarize(ownerId: string, range: OccurredRange): Promise<Record<string, string> | undefined> {
     const query = this.transactionRepository
       .createQueryBuilder('t')
       .leftJoin('t.review', 'r')
+      .where('t.ownerId = :ownerId', { ownerId })
       .select('count(*)', 'total')
       .addSelect('count(t.riskLevel)', 'scored')
       .addSelect('count(*) FILTER (WHERE t.flagged)', 'flagged')
@@ -143,16 +140,13 @@ export class TransactionModelAction extends AbstractModel<TransactionModel> {
       .addSelect('count(*) FILTER (WHERE t.riskLevel = :medium)', 'medium')
       .addSelect('count(*) FILTER (WHERE t.riskLevel = :high)', 'high')
       .addSelect('count(*) FILTER (WHERE t.flagged AND r.id IS NULL)', 'open')
-      .addSelect('count(*) FILTER (WHERE r.status = :inReview)', 'inReview')
-      .addSelect('count(*) FILTER (WHERE r.status = :closed)', 'closed')
+      .addSelect('count(r.id)', 'closed')
       .addSelect('count(*) FILTER (WHERE r.decision = :cleared)', 'cleared')
       .addSelect('count(*) FILTER (WHERE r.decision = :escalated)', 'escalated')
       .setParameters({
         low: RiskLevel.LOW,
         medium: RiskLevel.MEDIUM,
         high: RiskLevel.HIGH,
-        inReview: ReviewStatus.IN_REVIEW,
-        closed: ReviewStatus.CLOSED,
         cleared: ReviewDecision.CLEARED,
         escalated: ReviewDecision.ESCALATED,
       });
@@ -162,12 +156,14 @@ export class TransactionModelAction extends AbstractModel<TransactionModel> {
   // Counts per local day or week (period = its first day, YYYY-MM-DD).
   // Periods with no transactions are not returned.
   countByPeriod(
+    ownerId: string,
     interval: 'day' | 'week',
     timeZone: string,
     range: Required<OccurredRange>,
   ): Promise<{ period: string; total: string; flagged: string; high: string }[]> {
     const query = this.transactionRepository
       .createQueryBuilder('t')
+      .where('t.ownerId = :ownerId', { ownerId })
       .select(`to_char(date_trunc(:interval, t.occurredAt AT TIME ZONE :timeZone), 'YYYY-MM-DD')`, 'period')
       .addSelect('count(*)', 'total')
       .addSelect('count(*) FILTER (WHERE t.flagged)', 'flagged')
@@ -178,6 +174,7 @@ export class TransactionModelAction extends AbstractModel<TransactionModel> {
 
   // Oldest first, with the review status of each
   findCustomerTransactions(
+    ownerId: string,
     customerId: string,
     from: Date | undefined,
     to: Date | undefined,
@@ -186,7 +183,7 @@ export class TransactionModelAction extends AbstractModel<TransactionModel> {
     const query = this.transactionRepository
       .createQueryBuilder('t')
       .leftJoinAndSelect('t.review', 'r')
-      .where('t.customerId = :customerId', { customerId });
+      .where('t.ownerId = :ownerId AND t.customerId = :customerId', { ownerId, customerId });
     return inRange(query, { from, to }).orderBy('t.occurredAt', 'ASC').addOrderBy('t.id').take(take).getMany();
   }
 
@@ -194,7 +191,7 @@ export class TransactionModelAction extends AbstractModel<TransactionModel> {
     return this.transactionRepository.find({ where: { uploadId } });
   }
 
-  // Claimed or reviewed transactions keep the score the analyst saw
+  // Reviewed transactions keep the score the reviewer saw
   findUnreviewedForUpload(uploadId: string): Promise<TransactionModel[]> {
     return this.transactionRepository
       .createQueryBuilder('t')
@@ -208,14 +205,14 @@ export class TransactionModelAction extends AbstractModel<TransactionModel> {
     return this.transactionRepository.find({ where: { uploadId, riskLevel: IsNull() } });
   }
 
-  // Uploads that finished (or failed after storing rows) but have
+  // The owner's uploads that finished (or failed after storing rows) but have
   // transactions without a score. Uploads still processing are left alone.
-  async findUploadIdsWithUnscored(): Promise<string[]> {
+  async findUploadIdsWithUnscored(ownerId: string): Promise<string[]> {
     const rows = await this.transactionRepository
       .createQueryBuilder('t')
       .innerJoin('t.upload', 'u')
       .select('DISTINCT t.uploadId', 'uploadId')
-      .where('t.riskLevel IS NULL')
+      .where('t.ownerId = :ownerId AND t.riskLevel IS NULL', { ownerId })
       .andWhere('u.status IN (:...statuses)', {
         statuses: [UploadStatus.COMPLETED, UploadStatus.FAILED],
       })
@@ -229,14 +226,21 @@ export class TransactionModelAction extends AbstractModel<TransactionModel> {
     });
   }
 
-  // Context for the given customers. May include the transactions being
+  // Context for the given customers, from the owner's data only, so accounts
+  // never affect each other's scores. May include the transactions being
   // scored; the evaluator counts each transaction once.
-  async findCustomerHistory(customerIds: string[], from: Date, to: Date): Promise<TransactionModel[]> {
+  async findCustomerHistory(
+    ownerId: string,
+    customerIds: string[],
+    from: Date,
+    to: Date,
+  ): Promise<TransactionModel[]> {
     const history: TransactionModel[] = [];
     for (let i = 0; i < customerIds.length; i += CHUNK) {
       history.push(
         ...(await this.transactionRepository.find({
           where: {
+            ownerId,
             customerId: In(customerIds.slice(i, i + CHUNK)),
             occurredAt: Between(from, to),
           },

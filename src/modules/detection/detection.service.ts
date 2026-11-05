@@ -22,12 +22,15 @@ export class DetectionService {
     private readonly riskScorerService: RiskScorerService,
   ) {}
 
+  // Scores with the owner's own active rules
   async scoreBatch(
+    ownerId: string,
     targets: ScoringTransaction[],
     history: ScoringTransaction[],
   ): Promise<ScoringResult[]> {
+    await this.detectionRuleModelAction.ensureDefaults(ownerId);
     const rules = this.ruleEvaluatorService.prepare(
-      await this.detectionRuleModelAction.findActive(),
+      await this.detectionRuleModelAction.findActive(ownerId),
     );
     const fired = this.ruleEvaluatorService.evaluate(rules, targets, history);
     return targets.map((tx) => {

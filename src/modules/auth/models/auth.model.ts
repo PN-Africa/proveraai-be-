@@ -18,7 +18,7 @@ export class AccountModel extends BaseEntity {
   @Column({ type: 'enum', enum: Role, default: Role.ANALYST })
   role!: Role;
 
-  @Column({ type: 'enum', enum: AccountStatus, default: AccountStatus.PENDING })
+  @Column({ type: 'enum', enum: AccountStatus, default: AccountStatus.ACTIVE })
   status!: AccountStatus;
 
   @Column({ type: 'timestamptz', nullable: true })

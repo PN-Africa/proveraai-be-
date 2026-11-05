@@ -4,17 +4,9 @@ import type { AuthUser } from '../../common/decorators/current-user.decorator.js
 import { AuditService } from '../audit/audit.service.js';
 import { AuditAction } from '../audit/enums/audit-action.enum.js';
 import { LoginDto, SignupDto } from './dtos/auth.dto.js';
-import {
-  AccountProfile,
-  AccountService,
-  ApprovedAccount,
-  PendingAccount,
-} from './services/account.service.js';
-import type { MemberStatus } from './enums/account-status.enum.js';
-import type { MemberFilters } from './model-actions/auth-model-action.js';
+import { AccountProfile, AccountService } from './services/account.service.js';
 import { AuthCookieService } from './services/auth-cookie.service.js';
 import { CredentialsService } from './services/credentials.service.js';
-import { Member, MemberService } from './services/member.service.js';
 import { RefreshTokenService } from './services/refresh-token.service.js';
 import { TokenRevocationService } from './services/token-revocation.service.js';
 import { TokenService } from './services/token.service.js';
@@ -29,7 +21,6 @@ export class AuthService {
     private readonly tokenRevocationService: TokenRevocationService,
     private readonly authCookieService: AuthCookieService,
     private readonly auditService: AuditService,
-    private readonly memberService: MemberService,
   ) {}
 
   async login(dto: LoginDto, req: Request, res: Response): Promise<AccountProfile> {
@@ -96,27 +87,6 @@ export class AuthService {
 
   signup(dto: SignupDto): Promise<AccountProfile> {
     return this.accountService.signup(dto);
-  }
-
-  // Used by the users module (admin approves sign-ups)
-  listPendingAccounts(): Promise<PendingAccount[]> {
-    return this.accountService.listPending();
-  }
-
-  approveAccount(id: string, adminId: string): Promise<ApprovedAccount> {
-    return this.accountService.approve(id, adminId);
-  }
-
-  listMembers(filters: MemberFilters, page: number, limit: number) {
-    return this.memberService.list(filters, page, limit);
-  }
-
-  getMember(id: string): Promise<Member> {
-    return this.memberService.get(id);
-  }
-
-  setMemberStatus(id: string, status: MemberStatus, adminId: string): Promise<Member> {
-    return this.memberService.setStatus(id, status, adminId);
   }
 
   private verifyOrNull(token: string): AuthUser | null {

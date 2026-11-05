@@ -26,13 +26,13 @@ const toRuleView = (rule: DetectionRuleModel) => ({
   allowedParams: PARAM_KEYS[rule.type],
   weight: rule.weight,
   isActive: rule.isActive,
-  savedBy: rule.createdById,
   savedAt: rule.createdAt,
 });
 
-// Admin management of detection rules (AR-18). Editing saves a new version,
-// so indicators keep pointing at the exact version that fired. Changes apply
-// to scoring from now on; past scores change only through a manual rescore.
+// Each account manages its own copy of the detection rules. Editing saves a
+// new version, so indicators keep pointing at the exact version that fired.
+// Changes apply to scoring from now on; past scores change only through a
+// manual rescore.
 @Injectable()
 export class RulesService {
   private readonly logger = new Logger(RulesService.name);
@@ -44,18 +44,20 @@ export class RulesService {
     private readonly auditService: AuditService,
   ) {}
 
-  async list() {
-    return (await this.detectionRuleModelAction.findLatest()).map(toRuleView);
+  async list(user: AuthUser) {
+    await this.detectionRuleModelAction.ensureDefaults(user.id);
+    return (await this.detectionRuleModelAction.findLatest(user.id)).map(toRuleView);
   }
 
-  async get(ruleKey: string) {
-    const versions = await this.detectionRuleModelAction.findVersions(ruleKey);
+  async get(ruleKey: string, user: AuthUser) {
+    await this.detectionRuleModelAction.ensureDefaults(user.id);
+    const versions = await this.detectionRuleModelAction.findVersions(user.id, ruleKey);
     if (versions.length === 0) throw new NotFoundException('Rule not found');
     return { ...toRuleView(versions[0]), history: versions.map(toRuleView) };
   }
 
-  async update(ruleKey: string, dto: UpdateRuleDto, admin: AuthUser) {
-    const current = await this.latest(ruleKey);
+  async update(ruleKey: string, dto: UpdateRuleDto, user: AuthUser) {
+    const current = await this.latest(ruleKey, user);
     if (dto.version !== current.version) {
       throw new ConflictException(
         `This rule was changed since you loaded it (now version ${current.version}). Reload and try again`,
@@ -85,24 +87,24 @@ export class RulesService {
         await this.detectionRuleModelAction.setActive(current.id, false, manager);
         return this.detectionRuleModelAction.create(
           {
+            ownerId: user.id,
             ruleKey,
             version: current.version + 1,
             type: current.type,
             isActive: current.isActive,
-            createdById: admin.id,
             ...next,
           },
           manager,
         );
       });
     } catch (err) {
-      // Another admin saved the same version first
+      // The same version was saved first, e.g. from another browser tab
       if (err instanceof QueryFailedError && (err.driverError as { code?: string }).code === UNIQUE_VIOLATION) {
         throw new ConflictException('This rule was changed at the same time. Reload and try again');
       }
       throw err;
     }
-    this.logger.log(`Rule ${ruleKey} v${current.version} -> v${saved.version} by=${admin.id}`);
+    this.logger.log(`Rule ${ruleKey} v${current.version} -> v${saved.version} by=${user.id}`);
     await this.auditService.record({
       action: AuditAction.RULE_UPDATED,
       entityType: 'rule',
@@ -117,11 +119,11 @@ export class RulesService {
     return toRuleView(saved);
   }
 
-  async setActive(ruleKey: string, isActive: boolean, admin: AuthUser) {
-    const current = await this.latest(ruleKey);
+  async setActive(ruleKey: string, isActive: boolean, user: AuthUser) {
+    const current = await this.latest(ruleKey, user);
     if (current.isActive !== isActive) {
       await this.detectionRuleModelAction.setActive(current.id, isActive);
-      this.logger.log(`Rule ${ruleKey} v${current.version} ${isActive ? 'activated' : 'deactivated'} by=${admin.id}`);
+      this.logger.log(`Rule ${ruleKey} v${current.version} ${isActive ? 'activated' : 'deactivated'} by=${user.id}`);
       await this.auditService.record({
         action: isActive ? AuditAction.RULE_ACTIVATED : AuditAction.RULE_DEACTIVATED,
         entityType: 'rule',
@@ -133,8 +135,9 @@ export class RulesService {
     return toRuleView(current);
   }
 
-  private async latest(ruleKey: string): Promise<DetectionRuleModel> {
-    const rule = await this.detectionRuleModelAction.findLatestByKey(ruleKey);
+  private async latest(ruleKey: string, user: AuthUser): Promise<DetectionRuleModel> {
+    await this.detectionRuleModelAction.ensureDefaults(user.id);
+    const rule = await this.detectionRuleModelAction.findLatestByKey(user.id, ruleKey);
     if (!rule) throw new NotFoundException('Rule not found');
     return rule;
   }

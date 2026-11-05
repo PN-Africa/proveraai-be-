@@ -9,11 +9,11 @@ export class AuthDocs {
       ApiOperation({
         summary: 'Sign up',
         description:
-          'Creates an analyst account pending admin approval. It cannot log in until approved.',
+          'Creates an analyst account that can log in straight away and works on its own data only.',
       }),
       ApiResponse({
         status: 201,
-        description: 'id, fullName, email and role of the pending account',
+        description: 'id, fullName, email and role of the new account',
       }),
       ApiResponse({
         status: 400,
@@ -39,7 +39,7 @@ export class AuthDocs {
       }),
       ApiResponse({
         status: 403,
-        description: 'Correct password, but the account is still pending admin approval',
+        description: 'Correct password, but the account is deactivated',
       }),
       ApiResponse({ status: 429, description: 'Too many attempts from this IP' }),
     );

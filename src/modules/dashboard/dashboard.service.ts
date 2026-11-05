@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import type { AuthUser } from '../../common/decorators/current-user.decorator.js';
 import { TransactionsService } from '../transactions/transactions.service.js';
 import { DashboardRangeQueryDto, DashboardTrendQueryDto } from './dtos/dashboard-query.dto.js';
 
@@ -11,11 +12,11 @@ const toRange = (query: DashboardRangeQueryDto) => ({
 export class DashboardService {
   constructor(private readonly transactionsService: TransactionsService) {}
 
-  summary(query: DashboardRangeQueryDto) {
-    return this.transactionsService.getSummary(toRange(query));
+  summary(query: DashboardRangeQueryDto, user: AuthUser) {
+    return this.transactionsService.getSummary(toRange(query), user);
   }
 
-  trend(query: DashboardTrendQueryDto) {
-    return this.transactionsService.getTrend(toRange(query), query.interval ?? 'day');
+  trend(query: DashboardTrendQueryDto, user: AuthUser) {
+    return this.transactionsService.getTrend(toRange(query), query.interval ?? 'day', user);
   }
 }

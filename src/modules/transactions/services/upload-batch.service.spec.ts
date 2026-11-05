@@ -19,13 +19,14 @@ const setup = (previous: { id: string; createdAt: Date } | null) => {
 describe('UploadBatchService.assertNotUploadedBefore', () => {
   it('returns the content hash for a new file', async () => {
     const { service, uploadBatchModelAction } = setup(null);
-    await expect(service.assertNotUploadedBefore(file)).resolves.toBe(hashOf(file));
-    expect(uploadBatchModelAction.findNotFailedByHash).toHaveBeenCalledWith(hashOf(file));
+    await expect(service.assertNotUploadedBefore(file, 'owner-1')).resolves.toBe(hashOf(file));
+    // Only the owner's own uploads count; other accounts may upload the same file
+    expect(uploadBatchModelAction.findNotFailedByHash).toHaveBeenCalledWith(hashOf(file), 'owner-1');
   });
 
-  it('refuses a file uploaded before, naming the earlier upload', async () => {
+  it('refuses a file the owner uploaded before, naming the earlier upload', async () => {
     const { service } = setup({ id: 'upload-1', createdAt: new Date('2026-10-22T09:00:00Z') });
-    await expect(service.assertNotUploadedBefore(file)).rejects.toThrow(
+    await expect(service.assertNotUploadedBefore(file, 'owner-1')).rejects.toThrow(
       new ConflictException('This file was already uploaded (upload upload-1, 2026-10-22)'),
     );
   });
@@ -33,6 +34,6 @@ describe('UploadBatchService.assertNotUploadedBefore', () => {
   it('treats a file with any change as new', async () => {
     const { service } = setup(null);
     const changed = Buffer.concat([file, Buffer.from('T1,1,NGN,2026-10-01,PAYMENT\n')]);
-    expect(await service.assertNotUploadedBefore(changed)).not.toBe(hashOf(file));
+    expect(await service.assertNotUploadedBefore(changed, 'owner-1')).not.toBe(hashOf(file));
   });
 });

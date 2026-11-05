@@ -1,4 +1,4 @@
+// Every account is an analyst working on its own data
 export enum Role {
-  ADMIN = 'ADMIN',
   ANALYST = 'ANALYST',
 }

@@ -3,7 +3,6 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AbstractModel } from '../../../util/abstract-model-action.js';
 import { ReviewDecision } from '../enums/review-decision.enum.js';
-import { ReviewStatus } from '../enums/review-status.enum.js';
 import { ReviewModel } from '../models/review.model.js';
 
 @Injectable()
@@ -15,16 +14,23 @@ export class ReviewModelAction extends AbstractModel<ReviewModel> {
     super(reviewRepository, ReviewModel);
   }
 
-  // Creates the review unless one exists. The unique transactionId makes this
-  // safe when two analysts claim at the same moment: only one row is created.
-  async claim(transactionId: string, reviewerId: string): Promise<void> {
-    await this.reviewRepository
+  // Records the decision unless the transaction already has one; the unique
+  // transactionId makes a double submit store only one. False if one existed.
+  async decide(
+    transactionId: string,
+    reviewerId: string,
+    decision: ReviewDecision,
+    notes: string,
+  ): Promise<boolean> {
+    const result = await this.reviewRepository
       .createQueryBuilder()
       .insert()
       .into(ReviewModel)
-      .values({ transactionId, reviewerId, status: ReviewStatus.IN_REVIEW, claimedAt: new Date() })
+      .values({ transactionId, reviewerId, decision, notes, decidedAt: new Date() })
       .orIgnore()
+      .returning(['id'])
       .execute();
+    return (result.raw as unknown[]).length > 0;
   }
 
   findForTransaction(transactionId: string): Promise<ReviewModel | null> {
@@ -34,20 +40,5 @@ export class ReviewModelAction extends AbstractModel<ReviewModel> {
       .addSelect(['reviewer.id', 'reviewer.fullName'])
       .where('r.transactionId = :transactionId', { transactionId })
       .getOne();
-  }
-
-  // Scoped to the claiming analyst and an open review (AR-17), so the check
-  // and the write are one statement. Returns false if nothing matched.
-  async close(
-    transactionId: string,
-    reviewerId: string,
-    decision: ReviewDecision,
-    notes: string,
-  ): Promise<boolean> {
-    const result = await this.reviewRepository.update(
-      { transactionId, reviewerId, status: ReviewStatus.IN_REVIEW },
-      { status: ReviewStatus.CLOSED, decision, notes, decidedAt: new Date() },
-    );
-    return (result.affected ?? 0) > 0;
   }
 }

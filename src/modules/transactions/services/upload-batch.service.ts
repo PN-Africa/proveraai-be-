@@ -12,11 +12,12 @@ export class UploadBatchService {
     private readonly rejectedRowModelAction: RejectedRowModelAction,
   ) {}
 
-  // Refuses a file whose exact content was already uploaded. Failed uploads
-  // don't count, so a file can be retried after a failure.
-  async assertNotUploadedBefore(file: Buffer): Promise<string> {
+  // Refuses a file whose exact content this owner already uploaded. Other
+  // accounts may upload the same file. Failed uploads don't count, so a file
+  // can be retried after a failure.
+  async assertNotUploadedBefore(file: Buffer, ownerId: string): Promise<string> {
     const fileHash = createHash('sha256').update(file).digest('hex');
-    const previous = await this.uploadBatchModelAction.findNotFailedByHash(fileHash);
+    const previous = await this.uploadBatchModelAction.findNotFailedByHash(fileHash, ownerId);
     if (previous) {
       throw new ConflictException(
         `This file was already uploaded (upload ${previous.id}, ${previous.createdAt.toISOString().slice(0, 10)})`,
@@ -33,20 +34,22 @@ export class UploadBatchService {
     });
   }
 
-  list(page: number, limit: number) {
+  list(ownerId: string, page: number, limit: number) {
     return this.uploadBatchModelAction.findWithPagination(page, limit, {
+      where: { uploadedById: ownerId },
       order: { createdAt: 'DESC' },
     });
   }
 
-  async get(id: string): Promise<UploadBatchModel> {
-    const upload = await this.uploadBatchModelAction.findById(id);
+  // Another account's upload is reported as not found
+  async get(id: string, ownerId: string): Promise<UploadBatchModel> {
+    const upload = await this.uploadBatchModelAction.findOne({ where: { id, uploadedById: ownerId } });
     if (!upload) throw new NotFoundException('Upload not found');
     return upload;
   }
 
-  async listRejected(id: string, page: number, limit: number) {
-    await this.get(id);
+  async listRejected(id: string, ownerId: string, page: number, limit: number) {
+    await this.get(id, ownerId);
     return this.rejectedRowModelAction.findPageForUpload(id, page, limit);
   }
 }

@@ -26,30 +26,31 @@ const setup = ({
 describe('TransactionStatsService', () => {
   describe('summary', () => {
     it('turns raw counts into numbers and percentages of scored transactions', async () => {
-      const { service } = setup({
+      const { service, transactionModelAction } = setup({
         totals: {
           total: '21', scored: '20', flagged: '3', low: '15', medium: '2', high: '3',
-          open: '1', inReview: '1', closed: '1', cleared: '0', escalated: '1',
+          open: '2', closed: '1', cleared: '0', escalated: '1',
         },
       });
-      expect(await service.summary({})).toEqual({
+      expect(await service.summary('owner-1', {})).toEqual({
         from: null,
         to: null,
         transactions: { total: 21, scored: 20, flagged: 3, flaggedPercent: 15 },
         riskLevels: { LOW: 15, MEDIUM: 2, HIGH: 3 },
-        reviews: { open: 1, inReview: 1, closed: 1, cleared: 0, escalated: 1 },
+        reviews: { open: 2, closed: 1, cleared: 0, escalated: 1 },
         topIndicators: [{ ruleName: 'High-value transaction (NGN)', count: 4, percentOfScored: 20 }],
       });
+      expect(transactionModelAction.summarize).toHaveBeenCalledWith('owner-1', {});
     });
 
     it('returns zeros with no data', async () => {
-      const result = await setup().service.summary({});
+      const result = await setup().service.summary('owner-1', {});
       expect(result.transactions).toEqual({ total: 0, scored: 0, flagged: 0, flaggedPercent: 0 });
     });
 
     it('refuses a range that ends before it starts', async () => {
       await expect(
-        setup().service.summary({ from: new Date('2026-10-02'), to: new Date('2026-10-01') }),
+        setup().service.summary('owner-1', { from: new Date('2026-10-02'), to: new Date('2026-10-01') }),
       ).rejects.toThrow(BadRequestException);
     });
   });
@@ -60,6 +61,7 @@ describe('TransactionStatsService', () => {
         periods: [{ period: '2026-10-02', total: '5', flagged: '1', high: '1' }],
       });
       const result = await service.trend(
+        'owner-1',
         // 23:30 UTC on the 3rd is already the 4th in Lagos
         { from: new Date('2026-10-01T00:00:00Z'), to: new Date('2026-10-03T23:30:00Z') },
         'day',
@@ -70,14 +72,14 @@ describe('TransactionStatsService', () => {
         { period: '2026-10-03', total: 0, flagged: 0, high: 0 },
         { period: '2026-10-04', total: 0, flagged: 0, high: 0 },
       ]);
-      expect(transactionModelAction.countByPeriod).toHaveBeenCalledWith('day', 'Africa/Lagos', {
+      expect(transactionModelAction.countByPeriod).toHaveBeenCalledWith('owner-1', 'day', 'Africa/Lagos', {
         from: new Date('2026-10-01T00:00:00Z'),
         to: new Date('2026-10-03T23:30:00Z'),
       });
     });
 
     it('defaults to the last 30 days, starting at local midnight', async () => {
-      const result = await setup().service.trend({ to: new Date('2026-10-27T10:00:00Z') }, 'day');
+      const result = await setup().service.trend('owner-1', { to: new Date('2026-10-27T10:00:00Z') }, 'day');
       expect(result.points).toHaveLength(30);
       expect(result.points[0].period).toBe('2026-09-28');
       expect(result.points[29].period).toBe('2026-10-27');
@@ -85,7 +87,7 @@ describe('TransactionStatsService', () => {
     });
 
     it('groups by weeks starting on Monday', async () => {
-      const result = await setup().service.trend({ to: new Date('2026-10-27T10:00:00Z') }, 'week');
+      const result = await setup().service.trend('owner-1', { to: new Date('2026-10-27T10:00:00Z') }, 'week');
       expect(result.points).toHaveLength(12);
       expect(result.points[0].period).toBe('2026-08-10');
       expect(result.points[11].period).toBe('2026-10-26');
@@ -93,7 +95,7 @@ describe('TransactionStatsService', () => {
 
     it('refuses more than 400 points', async () => {
       await expect(
-        setup().service.trend({ from: new Date('2024-01-01'), to: new Date('2026-01-01') }, 'day'),
+        setup().service.trend('owner-1', { from: new Date('2024-01-01'), to: new Date('2026-01-01') }, 'day'),
       ).rejects.toThrow('The range is too long for interval=day. Use a shorter range or interval=week');
     });
   });

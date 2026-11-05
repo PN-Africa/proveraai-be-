@@ -1,6 +1,6 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsEnum, IsInt, IsISO8601, IsOptional, IsString, IsUUID, Max, MaxLength, Min } from 'class-validator';
+import { IsEnum, IsInt, IsISO8601, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
 import { AuditAction } from '../enums/audit-action.enum.js';
 
 export class ListAuditLogsQueryDto {
@@ -23,11 +23,6 @@ export class ListAuditLogsQueryDto {
   @IsOptional()
   @IsEnum(AuditAction)
   action?: AuditAction;
-
-  @ApiPropertyOptional({ format: 'uuid' })
-  @IsOptional()
-  @IsUUID()
-  actorId?: string;
 
   @ApiPropertyOptional({ example: 'transaction' })
   @IsOptional()

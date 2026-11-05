@@ -4,7 +4,6 @@ import type { AuthUser } from '../../../common/decorators/current-user.decorator
 import { Role } from '../../auth/enums/role.enum.js';
 import { RiskLevel } from '../../detection/enums/risk-level.enum.js';
 import { ReviewDecision } from '../enums/review-decision.enum.js';
-import { ReviewStatus } from '../enums/review-status.enum.js';
 import { RiskIndicatorModelAction } from '../model-actions/risk-indicator-model-action.js';
 import { TransactionModelAction } from '../model-actions/transaction-model-action.js';
 import { TransactionModel } from '../models/transaction.model.js';
@@ -48,7 +47,7 @@ const flagged = tx(flaggedFields);
 
 const setup = (target: TransactionModel | null = flagged, history = [tx({}), flagged]) => {
   const transactionModelAction = {
-    findById: vi.fn(async () => target),
+    findOne: vi.fn(async () => target),
     findCustomerTransactions: vi.fn(async () => history),
   };
   const riskIndicatorModelAction = {
@@ -78,7 +77,9 @@ describe('CustomerHistoryExportService', () => {
         '"High-value transaction of NGN 950,000; New location for this customer: Kano (usually Lagos)"',
       '',
     ]);
+    expect(transactionModelAction.findOne).toHaveBeenCalledWith({ where: { id: 'tx-2', ownerId: 'analyst-1' } });
     expect(transactionModelAction.findCustomerTransactions).toHaveBeenCalledWith(
+      'analyst-1',
       'CUST 1',
       new Date('2026-09-01T00:00:00Z'),
       undefined,
@@ -89,7 +90,7 @@ describe('CustomerHistoryExportService', () => {
   it('includes the review decision', async () => {
     const reviewed = tx({
       ...flaggedFields,
-      review: { status: ReviewStatus.CLOSED, decision: ReviewDecision.ESCALATED } as TransactionModel['review'],
+      review: { decision: ReviewDecision.ESCALATED } as TransactionModel['review'],
     });
     const file = await setup(reviewed, [reviewed]).service.export('tx-2', {}, analyst);
     expect(file.content.toString()).toContain('"CLOSED","ESCALATED"');

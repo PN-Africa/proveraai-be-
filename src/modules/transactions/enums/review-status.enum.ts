@@ -1,6 +1,6 @@
-// OPEN is never stored: a flagged transaction with no review row is open
+// Derived, never stored: a flagged transaction is OPEN until it has a
+// review (a decision), then CLOSED
 export enum ReviewStatus {
   OPEN = 'OPEN',
-  IN_REVIEW = 'IN_REVIEW',
   CLOSED = 'CLOSED',
 }

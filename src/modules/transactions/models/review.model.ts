@@ -2,14 +2,13 @@ import { Column, Entity, Index, JoinColumn, ManyToOne, OneToOne, type Relation }
 import { BaseEntity } from '../../../database/base.model.js';
 import { AccountModel } from '../../auth/models/auth.model.js';
 import { ReviewDecision } from '../enums/review-decision.enum.js';
-import { ReviewStatus } from '../enums/review-status.enum.js';
 import { TransactionModel } from './transaction.model.js';
 
-// An analyst's review of one flagged transaction. Created when an analyst
-// claims it; the decision is the platform's determination, not the risk level.
+// The owner's decision on one flagged transaction. It exists only once
+// decided; the decision is the platform's determination, not the risk level.
 @Entity('reviews')
 export class ReviewModel extends BaseEntity {
-  // One review per transaction (unique), so two analysts cannot both claim it
+  // One review per transaction (unique), so it can be decided only once
   @Column({ type: 'uuid' })
   transactionId!: string;
 
@@ -25,20 +24,13 @@ export class ReviewModel extends BaseEntity {
   @JoinColumn({ name: 'reviewerId' })
   reviewer?: AccountModel;
 
-  @Index()
-  @Column({ type: 'enum', enum: ReviewStatus, default: ReviewStatus.IN_REVIEW })
-  status!: ReviewStatus;
-
-  @Column({ type: 'enum', enum: ReviewDecision, nullable: true })
-  decision!: ReviewDecision | null;
+  @Column({ type: 'enum', enum: ReviewDecision })
+  decision!: ReviewDecision;
 
   // Required with the decision (TR-14)
-  @Column({ type: 'text', nullable: true })
-  notes!: string | null;
+  @Column({ type: 'text' })
+  notes!: string;
 
   @Column({ type: 'timestamptz' })
-  claimedAt!: Date;
-
-  @Column({ type: 'timestamptz', nullable: true })
-  decidedAt!: Date | null;
+  decidedAt!: Date;
 }

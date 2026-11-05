@@ -54,7 +54,7 @@ const setup = ({
   );
   const run = (lines: string[]) => {
     const file = Buffer.from([HEADER, ...lines].join('\n'));
-    return service.process('upload-1', file, csvReaderService.readHeader(file));
+    return service.process('upload-1', 'owner-1', file, csvReaderService.readHeader(file));
   };
   return { run, stored, rejected, uploadBatchModelAction };
 };
@@ -66,7 +66,7 @@ describe('IngestionService', () => {
     await run([row('T1'), row('T2', '-5'), row('T3')]);
 
     expect(stored.map((t) => t.transactionId)).toEqual(['T1', 'T3']);
-    expect(stored[0].uploadId).toBe('upload-1');
+    expect(stored[0]).toMatchObject({ uploadId: 'upload-1', ownerId: 'owner-1' });
     expect(rejected).toEqual([
       {
         uploadId: 'upload-1',

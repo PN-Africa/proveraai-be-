@@ -26,8 +26,8 @@ import { AuthDocs } from './docs/auth.docs.js';
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
-  // Creates a pending analyst account; an admin must approve it before it
-  // can log in. Open to everyone, so it gets a strict limit per IP.
+  // Creates an analyst account that can log in straight away. Open to
+  // everyone, so it gets a strict limit per IP.
   @Public()
   @Throttle({ default: { limit: 5, ttl: 600000 } })
   @Post('signup')

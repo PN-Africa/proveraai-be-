@@ -32,17 +32,11 @@ export class ListTransactionsQueryDto extends PaginationQueryDto {
 
   @ApiPropertyOptional({
     enum: ReviewStatus,
-    description: 'OPEN = flagged and not yet claimed. Use OPEN for the review queue',
+    description: 'OPEN = flagged and not reviewed yet (the review queue). CLOSED = reviewed',
   })
   @IsOptional()
   @IsEnum(ReviewStatus)
   reviewStatus?: ReviewStatus;
-
-  @ApiPropertyOptional({ type: Boolean, description: 'Only reviews claimed by the current user' })
-  @IsOptional()
-  @Transform(toBoolean)
-  @IsBoolean()
-  mine?: boolean;
 
   @ApiPropertyOptional({ format: 'uuid' })
   @IsOptional()

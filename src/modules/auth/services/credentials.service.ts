@@ -51,21 +51,13 @@ export class CredentialsService {
     }
 
     await this.loginLockoutService.reset(email);
-    if (account.status === AccountStatus.PENDING) {
-      await this.auditService.record({
-        action: AuditAction.LOGIN_PENDING,
-        actorId: account.id,
-        actorRole: account.role,
-      });
-      throw new ForbiddenException('Account pending approval');
-    }
     if (account.status === AccountStatus.DEACTIVATED) {
       await this.auditService.record({
         action: AuditAction.LOGIN_DEACTIVATED,
         actorId: account.id,
         actorRole: account.role,
       });
-      throw new ForbiddenException('Account deactivated. Contact an administrator');
+      throw new ForbiddenException('Account deactivated');
     }
     if (account.status !== AccountStatus.ACTIVE) {
       throw new UnauthorizedException('Invalid credentials');

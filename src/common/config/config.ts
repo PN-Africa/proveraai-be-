@@ -24,9 +24,4 @@ export const envs = () => ({
     | 'none',
   cookieDomain: process.env.COOKIE_DOMAIN || undefined,
   trustProxy: process.env.TRUST_PROXY ? Number(process.env.TRUST_PROXY) : 0,
-
-  // First administrator, created on startup while none exists (main.ts)
-  adminEmail: process.env.ADMIN_EMAIL || undefined,
-  adminPassword: process.env.ADMIN_PASSWORD || undefined,
-  adminFullName: process.env.ADMIN_FULL_NAME || undefined,
 });

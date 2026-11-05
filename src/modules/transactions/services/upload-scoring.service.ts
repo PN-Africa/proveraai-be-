@@ -46,12 +46,14 @@ export class UploadScoringService {
   }
 
   // Each transaction is compared with the customer's history in the 90 days
-  // before it, whichever upload it came in, so the result does not depend on
-  // the order files were uploaded. Old indicators are replaced in the same
-  // database transaction as the new scores.
+  // before it, whichever of the owner's uploads it came in, so the result does
+  // not depend on the order files were uploaded. Old indicators are replaced in
+  // the same database transaction as the new scores.
   async score(transactions: TransactionModel[]): Promise<ScoringCounts> {
     const targets = transactions.map(toScoring);
     if (targets.length === 0) return { scored: 0, flagged: 0 };
+    // Callers score one upload at a time, so every transaction has this owner
+    const { ownerId } = transactions[0];
 
     const customerIds = [...new Set(targets.flatMap((t) => (t.customerId ? [t.customerId] : [])))];
     let earliest = Infinity;
@@ -62,13 +64,14 @@ export class UploadScoringService {
     }
     const history = (
       await this.transactionModelAction.findCustomerHistory(
+        ownerId,
         customerIds,
         new Date(earliest - HISTORY_DAYS * DAY_MS),
         new Date(latest),
       )
     ).map(toScoring);
 
-    const results = await this.detectionService.scoreBatch(targets, history);
+    const results = await this.detectionService.scoreBatch(ownerId, targets, history);
     await this.dataSource.transaction(async (manager) => {
       await this.riskIndicatorModelAction.deleteForTransactions(
         targets.map((t) => t.id),

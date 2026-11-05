@@ -37,7 +37,7 @@ export class TransactionsService {
   async upload(file: UploadedCsvFile | undefined, user: AuthUser) {
     if (!file) throw new BadRequestException('Attach a CSV file in the "file" field');
     const columns = this.csvReaderService.readHeader(file.buffer);
-    const fileHash = await this.uploadBatchService.assertNotUploadedBefore(file.buffer);
+    const fileHash = await this.uploadBatchService.assertNotUploadedBefore(file.buffer, user.id);
     const upload = await this.uploadBatchService.create(file.originalname, fileHash, user.id);
     await this.auditService.record({
       action: AuditAction.UPLOAD_CREATED,
@@ -45,28 +45,28 @@ export class TransactionsService {
       entityId: upload.id,
       metadata: { fileName: upload.fileName, bytes: file.size, fileHash },
     });
-    void this.ingestionService.process(upload.id, file.buffer, columns);
+    void this.ingestionService.process(upload.id, user.id, file.buffer, columns);
     return { uploadId: upload.id, status: UploadStatus.PENDING };
   }
 
-  listUploads(query: PaginationQueryDto) {
-    return this.uploadBatchService.list(query.page ?? 1, query.limit ?? 20);
+  listUploads(query: PaginationQueryDto, user: AuthUser) {
+    return this.uploadBatchService.list(user.id, query.page ?? 1, query.limit ?? 20);
   }
 
-  getUpload(id: string) {
-    return this.uploadBatchService.get(id);
+  getUpload(id: string, user: AuthUser) {
+    return this.uploadBatchService.get(id, user.id);
   }
 
-  listRejectedRows(id: string, query: PaginationQueryDto) {
-    return this.uploadBatchService.listRejected(id, query.page ?? 1, query.limit ?? 20);
+  listRejectedRows(id: string, query: PaginationQueryDto, user: AuthUser) {
+    return this.uploadBatchService.listRejected(id, user.id, query.page ?? 1, query.limit ?? 20);
   }
 
-  rescoreUpload(id: string, admin: AuthUser) {
-    return this.detectionRunService.rescoreUpload(id, admin);
+  rescoreUpload(id: string, user: AuthUser) {
+    return this.detectionRunService.rescoreUpload(id, user);
   }
 
-  scoreUnscored(admin: AuthUser) {
-    return this.detectionRunService.scoreUnscored(admin);
+  scoreUnscored(user: AuthUser) {
+    return this.detectionRunService.scoreUnscored(user);
   }
 
   listTransactions(query: ListTransactionsQueryDto, user: AuthUser) {
@@ -81,19 +81,15 @@ export class TransactionsService {
     return this.customerHistoryExportService.export(id, range, user);
   }
 
-  getSummary(range: OccurredRange) {
-    return this.transactionStatsService.summary(range);
+  getSummary(range: OccurredRange, user: AuthUser) {
+    return this.transactionStatsService.summary(user.id, range);
   }
 
-  getTrend(range: OccurredRange, interval: TrendInterval) {
-    return this.transactionStatsService.trend(range, interval);
+  getTrend(range: OccurredRange, interval: TrendInterval, user: AuthUser) {
+    return this.transactionStatsService.trend(user.id, range, interval);
   }
 
-  claimReview(id: string, analyst: AuthUser) {
-    return this.reviewService.claim(id, analyst);
-  }
-
-  decideReview(id: string, dto: ReviewDecisionDto, analyst: AuthUser) {
-    return this.reviewService.decide(id, dto, analyst);
+  decideReview(id: string, dto: ReviewDecisionDto, user: AuthUser) {
+    return this.reviewService.decide(id, dto, user);
   }
 }

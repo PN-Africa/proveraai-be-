@@ -5,7 +5,13 @@ import { ReviewModel } from './review.model.js';
 import { UploadBatchModel } from './upload-batch.model.js';
 
 @Entity('transactions')
+@Index(['ownerId', 'transactionId'], { unique: true })
 export class TransactionModel extends BaseEntity {
+  // The account that uploaded it. Every read and every score is scoped to it.
+  @Index()
+  @Column({ type: 'uuid' })
+  ownerId!: string;
+
   @Index()
   @Column({ type: 'uuid' })
   uploadId!: string;
@@ -14,8 +20,9 @@ export class TransactionModel extends BaseEntity {
   @JoinColumn({ name: 'uploadId' })
   upload?: UploadBatchModel;
 
-  // The Transaction ID from the uploaded file. Unique, so re-uploads are rejected.
-  @Column({ length: 100, unique: true })
+  // The Transaction ID from the uploaded file. Unique per owner, so an owner's
+  // re-upload is rejected while another account can upload the same data.
+  @Column({ length: 100 })
   transactionId!: string;
 
   // numeric comes back from Postgres as a string, which keeps it exact

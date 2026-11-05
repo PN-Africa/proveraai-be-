@@ -1,26 +1,15 @@
 import { AuditService } from '../../audit/audit.service.js';
-import {
-  BadRequestException,
-  ConflictException,
-  NotFoundException,
-} from '@nestjs/common';
+import { BadRequestException, ConflictException } from '@nestjs/common';
 import { AccountStatus } from '../enums/account-status.enum.js';
 import { Role } from '../enums/role.enum.js';
 import { AuthModelAction } from '../model-actions/auth-model-action.js';
 import { AccountService } from './account.service.js';
 import { PasswordService } from './password.service.js';
 
-const setup = ({ emailTaken = false, pendingExists = true } = {}) => {
+const setup = ({ emailTaken = false } = {}) => {
   const authModelAction = {
     existsByEmail: vi.fn(async () => emailTaken),
     create: vi.fn(async (data: Record<string, unknown>) => ({ id: 'new-id', ...data })),
-    activatePending: vi.fn(async () => pendingExists),
-    findActiveById: vi.fn(async (id: string) => ({
-      id,
-      fullName: 'Ada Lovelace',
-      email: 'analyst@example.com',
-      role: Role.ANALYST,
-    })),
   };
   const passwordService = { hash: vi.fn(async (p: string) => `hashed:${p}`) };
   const service = new AccountService(
@@ -35,7 +24,7 @@ const password = 'a-long-enough-password';
 
 describe('AccountService', () => {
   describe('signup', () => {
-    it('creates a pending analyst with a normalised email and hashed password', async () => {
+    it('creates an active analyst with a normalised email and hashed password', async () => {
       const { service, authModelAction } = setup();
 
       const profile = await service.signup({
@@ -48,7 +37,7 @@ describe('AccountService', () => {
         fullName: 'Ada Lovelace',
         email: 'analyst@example.com',
         role: Role.ANALYST,
-        status: AccountStatus.PENDING,
+        status: AccountStatus.ACTIVE,
         passwordHash: `hashed:${password}`,
       });
       expect(profile).toEqual({
@@ -72,30 +61,6 @@ describe('AccountService', () => {
       await expect(
         service.signup({ fullName: 'Ada Lovelace', email: 'a@example.com', password: 'short' }),
       ).rejects.toThrow(BadRequestException);
-    });
-  });
-
-  describe('approve', () => {
-    it('activates a pending account and returns its details', async () => {
-      const { service, authModelAction } = setup();
-
-      const result = await service.approve('account-1', 'admin-1');
-
-      expect(authModelAction.activatePending).toHaveBeenCalledWith('account-1');
-      expect(result).toEqual({
-        message: 'Account approved',
-        account: {
-          id: 'account-1',
-          fullName: 'Ada Lovelace',
-          email: 'analyst@example.com',
-          role: Role.ANALYST,
-        },
-      });
-    });
-
-    it('returns 404 when there is no pending account with that id', async () => {
-      const { service } = setup({ pendingExists: false });
-      await expect(service.approve('missing', 'admin-1')).rejects.toThrow(NotFoundException);
     });
   });
 });

@@ -24,7 +24,7 @@ const setup = ({ failAppend = false } = {}) => {
 // Runs work as if inside an HTTP request from this user and IP
 const asRequest = (work: () => Promise<void>) =>
   new Promise<void>((resolve, reject) => {
-    const req = { ip: '203.0.113.7', user: { id: 'admin-1', role: Role.ADMIN } } as unknown as Request;
+    const req = { ip: '203.0.113.7', user: { id: 'admin-1', role: Role.ANALYST } } as unknown as Request;
     requestContextMiddleware(req, {} as never, () => {
       work().then(resolve, reject);
     });
@@ -38,7 +38,7 @@ describe('AuditService', () => {
     );
     expect(rows[0]).toMatchObject({
       actorId: 'admin-1',
-      actorRole: Role.ADMIN,
+      actorRole: Role.ANALYST,
       ip: '203.0.113.7',
       action: 'rule.updated',
       entityType: 'rule',

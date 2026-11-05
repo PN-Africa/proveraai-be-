@@ -1,7 +1,5 @@
-import { AuditService } from '../../audit/audit.service.js';
 import {
   ExecutionContext,
-  ForbiddenException,
   ServiceUnavailableException,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -9,7 +7,6 @@ import { ConfigService } from '@nestjs/config';
 import { Reflector } from '@nestjs/core';
 import type { AuthUser } from '../../../common/decorators/current-user.decorator.js';
 import { IS_PUBLIC_KEY } from '../../../common/decorators/public.decorator.js';
-import { ROLES_KEY } from '../../../common/decorators/roles.decorator.js';
 import { Role } from '../enums/role.enum.js';
 import { AuthCookieService } from '../services/auth-cookie.service.js';
 import { TokenRevocationService } from '../services/token-revocation.service.js';
@@ -17,29 +14,22 @@ import { TokenService } from '../services/token.service.js';
 import { AuthGuard } from './auth.guard.js';
 
 const analyst: AuthUser = { id: 'account-1', role: Role.ANALYST, jti: 'jti-1', iat: 1, exp: 2 };
-const admin: AuthUser = { ...analyst, role: Role.ADMIN };
 
 interface Setup {
   isPublic?: boolean;
-  roles?: Role[];
   cookie?: string | null;
-  user?: AuthUser;
   verify?: () => AuthUser;
   revoked?: boolean | Error;
 }
 
 const setup = ({
   isPublic = false,
-  roles,
   cookie = 'token',
-  user = analyst,
-  verify = () => user,
+  verify = () => analyst,
   revoked = false,
 }: Setup = {}) => {
-  const request: { cookies: Record<string, string>; method: string; path: string; user?: AuthUser } = {
+  const request: { cookies: Record<string, string>; user?: AuthUser } = {
     cookies: cookie ? { access_token: cookie } : {},
-    method: 'GET',
-    path: '/admin-only',
   };
   const context = {
     getHandler: () => () => undefined,
@@ -47,8 +37,7 @@ const setup = ({
     switchToHttp: () => ({ getRequest: () => request }),
   } as unknown as ExecutionContext;
   const reflector = {
-    getAllAndOverride: (key: string) =>
-      key === IS_PUBLIC_KEY ? isPublic : key === ROLES_KEY ? roles : undefined,
+    getAllAndOverride: (key: string) => (key === IS_PUBLIC_KEY ? isPublic : undefined),
   } as unknown as Reflector;
   const tokenService = { verifyAccessToken: vi.fn(verify) };
   const tokenRevocationService = {
@@ -62,7 +51,6 @@ const setup = ({
     tokenService as unknown as TokenService,
     tokenRevocationService as unknown as TokenRevocationService,
     new AuthCookieService({} as ConfigService),
-    { record: vi.fn() } as unknown as AuditService,
   );
   return { guard, context, request, tokenService };
 };
@@ -102,22 +90,5 @@ describe('AuthGuard', () => {
     const { guard, context, request } = setup();
     await expect(guard.canActivate(context)).resolves.toBe(true);
     expect(request.user).toEqual(analyst);
-  });
-
-  // AR-20: an analyst can never use an admin-only route
-  it('returns 403 when an analyst calls an admin-only route', async () => {
-    const { guard, context, request } = setup({ roles: [Role.ADMIN] });
-    await expect(guard.canActivate(context)).rejects.toThrow(ForbiddenException);
-    expect(request.user).toEqual(analyst);
-  });
-
-  it('lets an admin call an admin-only route', async () => {
-    const { guard, context } = setup({ roles: [Role.ADMIN], user: admin });
-    await expect(guard.canActivate(context)).resolves.toBe(true);
-  });
-
-  it('lets any signed-in role call a route without @Roles', async () => {
-    const { guard, context } = setup({ roles: undefined });
-    await expect(guard.canActivate(context)).resolves.toBe(true);
   });
 });

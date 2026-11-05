@@ -1,13 +1,11 @@
 import { plainToInstance } from 'class-transformer';
 import {
-  IsEmail,
   IsIn,
   IsInt,
   IsNotEmpty,
   IsNumber,
   IsOptional,
   IsString,
-  Length,
   Max,
   Min,
   MinLength,
@@ -90,21 +88,6 @@ class EnvVar {
   @IsInt()
   @Min(0)
   TRUST_PROXY?: number;
-
-  // First administrator, created on startup while no admin exists
-  @IsOptional()
-  @IsEmail()
-  ADMIN_EMAIL?: string;
-
-  @IsOptional()
-  @IsString()
-  @Length(12, 128)
-  ADMIN_PASSWORD?: string;
-
-  @IsOptional()
-  @IsString()
-  @Length(2, 100)
-  ADMIN_FULL_NAME?: string;
 }
 
 export const validate = (config: Record<string, unknown>): EnvVar => {

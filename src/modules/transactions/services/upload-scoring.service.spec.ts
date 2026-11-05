@@ -7,13 +7,20 @@ import { TransactionModel } from '../models/transaction.model.js';
 import { UploadScoringService } from './upload-scoring.service.js';
 
 const tx = (id: string, occurredAt: string) =>
-  ({ id, transactionId: id, amount: '100.00', occurredAt: new Date(occurredAt), customerId: 'CUST-1' }) as TransactionModel;
+  ({
+    id,
+    ownerId: 'owner-1',
+    transactionId: id,
+    amount: '100.00',
+    occurredAt: new Date(occurredAt),
+    customerId: 'CUST-1',
+  }) as TransactionModel;
 
 const setup = () => {
   const manager = {} as EntityManager;
   const dataSource = { transaction: vi.fn(async (work: (m: EntityManager) => Promise<void>) => work(manager)) };
   const detectionService = {
-    scoreBatch: vi.fn(async (targets: { id: string }[]) =>
+    scoreBatch: vi.fn(async (_ownerId: string, targets: { id: string }[]) =>
       targets.map((t, i) => ({
         id: t.id,
         indicators: i === 0 ? [{ ruleId: 'r', ruleKey: 'k', ruleName: 'n', weight: 80, reason: 'x', details: {} }] : [],
@@ -37,7 +44,7 @@ const setup = () => {
     transactionModelAction as unknown as TransactionModelAction,
     riskIndicatorModelAction as unknown as RiskIndicatorModelAction,
   );
-  return { service, manager, transactionModelAction, riskIndicatorModelAction };
+  return { service, manager, transactionModelAction, riskIndicatorModelAction, detectionService };
 };
 
 describe('UploadScoringService.score', () => {
@@ -55,10 +62,12 @@ describe('UploadScoringService.score', () => {
     expect(transactionModelAction.saveRiskResults).toHaveBeenCalledWith(expect.any(Array), manager);
   });
 
-  it('loads 90 days of customer history before the earliest transaction', async () => {
-    const { service, transactionModelAction } = setup();
+  it("scores with the owner's rules and 90 days of the owner's own customer history", async () => {
+    const { service, transactionModelAction, detectionService } = setup();
     await service.score([tx('a', '2026-10-01T10:00:00Z'), tx('b', '2026-10-05T10:00:00Z')]);
+    expect(detectionService.scoreBatch).toHaveBeenCalledWith('owner-1', expect.any(Array), []);
     expect(transactionModelAction.findCustomerHistory).toHaveBeenCalledWith(
+      'owner-1',
       ['CUST-1'],
       new Date('2026-07-03T10:00:00Z'),
       new Date('2026-10-05T10:00:00Z'),

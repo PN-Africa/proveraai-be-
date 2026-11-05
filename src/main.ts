@@ -8,8 +8,6 @@ import { AppModule, ObserveInstrument, observeEnabled } from './app.module.js';
 import { GlobalExceptionFilter } from './common/filters/http-exception.filter.js';
 import { requestContextMiddleware } from './common/request-context/request-context.js';
 import { initializeDataSource } from './database/data-source.js';
-import { seedAccounts } from './database/seed-accounts.js';
-import { seedDetectionRules } from './database/seed-detection-rules.js';
 import { ACCESS_TOKEN_COOKIE } from './modules/auth/services/auth-cookie.service.js';
 
 async function bootstrap() {
@@ -61,7 +59,6 @@ async function bootstrap() {
     .setDescription('Provera AI fraud-detection MVP API')
     .setVersion('1.0')
     .addTag('auth')
-    .addTag('users')
     .addTag('uploads')
     .addTag('transactions')
     .addTag('dashboard')
@@ -74,18 +71,11 @@ async function bootstrap() {
     swaggerOptions: { persistAuthorization: true },
   });
 
-  // Database: initialize connection, run pending migrations, then seed
+  // Database: initialize connection and run pending migrations. Each account
+  // gets its default detection rules the first time it needs them.
   const logger = new Logger('bootstrap');
   try {
     await initializeDataSource();
-
-    try {
-      await seedAccounts();
-      await seedDetectionRules();
-      logger.log('Database seeding completed!');
-    } catch (seedError) {
-      logger.error('Error during database seeding', seedError);
-    }
   } catch (err) {
     logger.error('Error during data source initialization', err);
     process.exit(1);
